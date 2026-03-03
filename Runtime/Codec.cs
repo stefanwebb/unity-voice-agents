@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Unity.WebRTC;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     internal static class RTCRtpCodecCapabilityExtension
     {

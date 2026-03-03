@@ -4,7 +4,7 @@ using System.Linq;
 using Unity.WebRTC;
 using UnityEngine;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     /// <summary>
     /// AudioStreamReceiver is a component that receives audio streams and plays them through a specified AudioSource.

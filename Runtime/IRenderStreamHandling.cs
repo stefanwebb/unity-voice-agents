@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Unity.WebRTC;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     public interface IRenderStreamingDelegate
     {

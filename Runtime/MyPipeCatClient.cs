@@ -7,7 +7,7 @@ using Unity.WebRTC;
 using System.Text;
 using TMPro;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
 public class MyPipeCatClient : MonoBehaviour
 {

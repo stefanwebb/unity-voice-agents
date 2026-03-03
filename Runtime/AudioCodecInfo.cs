@@ -2,7 +2,7 @@ using System;
 using Unity.WebRTC;
 using UnityEngine;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     /// <summary>
     /// Represents information about an audio codec, including its MIME type, SDP format parameters, channel count, and sample rate.

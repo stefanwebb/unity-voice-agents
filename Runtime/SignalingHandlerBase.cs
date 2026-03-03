@@ -5,7 +5,7 @@ using System.Linq;
 using Unity.WebRTC;
 using UnityEngine;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     /// <summary>
     ///

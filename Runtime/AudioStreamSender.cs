@@ -6,7 +6,7 @@ using Unity.Collections;
 using Unity.WebRTC;
 using UnityEngine;
 
-namespace GenerativeGamedev.VoiceAgents
+namespace Stefanwebb.Voiceagents
 {
     /// <summary>
     /// Specifies the source of the audio stream.
