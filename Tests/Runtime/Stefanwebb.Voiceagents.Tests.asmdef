@@ -1,0 +1,11 @@
+{
+    "name": "Stefanwebb.Voiceagents.Tests",
+    "references": [
+        "Stefanwebb.Voiceagents"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

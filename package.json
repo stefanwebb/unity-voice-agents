@@ -1,0 +1,29 @@
+{
+	"name": "com.stefanwebb.voiceagents",
+	"displayName":"Voice Agents",
+	"version": "0.1.0",
+	"unity": "6000.3",
+	"unityRelease": "8f1",
+	"description": "Build open-source AI voice agents that run fully locally for intelligent NPCs and game interfaces.",
+	"dependencies": {
+		"com.unity.test-framework": "1.6.0",
+		"com.unity.webrtc": "3.0.0"
+	},
+	"keywords": [
+		"voiceai",
+		"ai",
+		"stt",
+		"llms",
+		"vllm",
+		"pipecat",
+		"npcs" 
+	],
+	"author": {
+	"name": "Stefan Webb",
+	"email": "info@stefanwebb.me",
+	"url": "https://gamedev.blog"
+	},
+	"documentationUrl": "https://github.com/stefanwebb/UnityVoiceAgents",
+	"changelogUrl": "https://github.com/stefanwebb/UnityVoiceAgents",
+	"licensesUrl": "https://github.com/stefanwebb/UnityVoiceAgents"
+}

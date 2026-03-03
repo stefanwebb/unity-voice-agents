@@ -1,0 +1,10 @@
+{
+    "name": "Stefanwebb.Voiceagents.Editor",
+    "references": [
+      "Stefanwebb.Voiceagents"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}
