@@ -23,7 +23,14 @@
 	"email": "info@stefanwebb.me",
 	"url": "https://gamedev.blog"
 	},
-	"documentationUrl": "https://github.com/stefanwebb/UnityVoiceAgents",
-	"changelogUrl": "https://github.com/stefanwebb/UnityVoiceAgents",
-	"licensesUrl": "https://github.com/stefanwebb/UnityVoiceAgents"
+	"samples": [
+        {
+            "displayName": "Simple Example",
+            "description": "An example scene that transcribes user speech, passes to an LLM, and displays to the response.",
+            "path": "Samples/Example"
+        }
+    ],
+	"documentationUrl": "https://github.com/stefanwebb/unity-voice-agents/tree/main/Documentation",
+	"changelogUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/CHANGELOG.md",
+	"licensesUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/LICENSE.md"
 }
