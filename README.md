@@ -1,6 +1,6 @@
-# UnityVoiceAgents
+# Unity Voice Agents
 
-UnityVoiceAgents is a Unity package for building open-source AI voice agents that run fully locally. 
+Unity Voice Agents is a Unity package for building open-source AI voice agents that run fully locally and with realtime latency.
 
 You can use it to build intelligent non-player characters (NPCs), game interfaces, among many other applications.
 
