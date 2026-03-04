@@ -105,6 +105,8 @@ InitTestScene*.unity*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+**/__pycache__/
+**/__pycache__.meta
 *.py[codz]
 *$py.class
 
