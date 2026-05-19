@@ -46,7 +46,8 @@ Follow the instructions on the Pipecat website to install it (which requires tha
 
 This package provides an example Pipecat server that runs on Mac and the launch command, from the project folder, is:
 ```bash
-uv run Packages/com.stefanwebb.voiceagents/Agent/agent.py
+cd Packages/com.stefanwebb.voiceagents/Agent
+uv run agent.py
 ```
 
 ### Sample Scene
