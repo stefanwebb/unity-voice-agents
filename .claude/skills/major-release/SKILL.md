@@ -57,15 +57,17 @@ git push origin main --follow-tags
 
 The tag **must point to HEAD** and must match `package.json`'s `version` exactly — Unity Package Manager resolves `#vX.Y.Z` git URLs by tag, and a mismatch between the tag and `package.json` confuses the Package Manager's version display.
 
-### 6. Create the GitHub release
+### 6. Confirm the GitHub release
 
-There is no package registry step (no PyPI equivalent): the git tag *is* the release. Publish it on GitHub so it shows up under Releases:
+Pushing the tag triggers `.github/workflows/release.yml`, which checks that the tag matches `package.json`'s version and creates the GitHub release with `RELEASE.md` as the notes. There is no package registry step (no PyPI equivalent): the git tag *is* the release.
+
+Verify it appeared:
 
 ```bash
-gh release create v(X+1).0.0 -F RELEASE.md -t "v(X+1).0.0"
+gh release view v(X+1).0.0
 ```
 
-If `.github/workflows/release.yml` exists and triggers on `v*` tags, skip this step — the push in step 5 already created the release from `RELEASE.md`.
+If the workflow failed (e.g. tag/version mismatch), fix the cause and re-tag rather than creating the release by hand.
 
 ## What users get
 
