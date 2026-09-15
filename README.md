@@ -53,7 +53,7 @@ The package connects Unity to local **speech-to-text (STT)** and **LLM chat** se
 
 1. In Package Manager select **Voice Agents ▸ Samples** and click **Import** next to *Voice Agent Demo*.
 2. Start the `stt` and `chat` servers so `/tmp/tool-stt` and `/tmp/tool-chat` exist.
-3. Open `Assets/Samples/Voice Agents/<version>/Voice Agent Demo/SampleScene.unity`. The sample uses URP — if your project is not on URP, assign a URP asset in Graphics settings or ignore the post-processing volume.
+3. Open `Assets/Samples/Voice Agents/<version>/Voice Agent Demo/VoiceAgentDemo.unity`. The sample uses URP — if your project is not on URP, assign a URP asset in Graphics settings or ignore the post-processing volume.
 4. Select the **AgentManager** object: the `SttClient` inspector shows the connection state and lets you pick a microphone (works without entering Play mode). Paste a system prompt into `ConversationManager` if you like (`SystemPrompt.Text` in the sample is an example).
 5. Press **Play**, press **Space** and speak (the game pauses while you talk; the server detects when you stop), then press **Enter** to send the transcription to the LLM. The reply streams into the on-screen textbox — press **Enter** again to dismiss it and resume. The icon shows disconnected / listening / transcribing / thinking state.
 

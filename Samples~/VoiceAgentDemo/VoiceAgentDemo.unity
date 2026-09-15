@@ -1209,7 +1209,7 @@ MonoBehaviour:
   priority: 0
   blendDistance: 0
   weight: 1
-  sharedProfile: {fileID: 11400000, guid: 10fc4df2da32a41aaa32d77bc913491c, type: 2}
+  sharedProfile: {fileID: 11400000, guid: 0d8d77b789624d6cb17d482d814b18af, type: 2}
 --- !u!4 &832575519
 Transform:
   m_ObjectHideFlags: 0
@@ -1902,11 +1902,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ca1c7b4a6df5d41aba54bef4251e73ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GenerativeGamedev.PlayerController
-  _actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _actions: {fileID: -944628639613478452, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
   _speechStartActionName: Player/StartSpeech
   _confirmActionName: Player/ConfirmInput
-  _speechStartAction: {fileID: 7708618775343873207, guid: 052faaac586de48259a63d0c4782560b, type: 3}
-  _confirmAction: {fileID: -1320005915675450210, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  _speechStartAction: {fileID: 7708618775343873207, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
+  _confirmAction: {fileID: -1320005915675450210, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
   _speechContent: {fileID: 1778121645}
   _agentContent: {fileID: 675640789}
 --- !u!1 &1895641964
