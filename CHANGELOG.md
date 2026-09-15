@@ -4,6 +4,15 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] 2026-09-14
+### Bug fixes
+- Ship `.meta` files for `package.json` and the root `README.md`, `CHANGELOG.md`, `LICENSE.md`, `RELEASE.md`, so installing the package no longer generates untracked `.meta` files in the consumer's project
+- Stop shipping the internal design-note markdown (previously `docs/`), which Unity imported as TextAssets
+
+### Infrastructure / Documentation
+- `release.yml` workflow: pushing a `vX.Y.Z` tag now verifies it matches `package.json` and creates the GitHub release from `RELEASE.md`
+- Release skills updated accordingly
+
 ## [0.2.0] 2026-09-14
 ### Named-pipe STT + chat clients
 - Replaced the WebRTC/Pipecat proof-of-concept with a named-pipe based client (`ToolClient`) that talks to local `stt` and `chat` tool servers
