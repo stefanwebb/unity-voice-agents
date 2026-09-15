@@ -1,6 +1,6 @@
 {
   "name": "com.stefanwebb.voiceagents",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "displayName": "Voice Agents",
   "description": "Build AI voice agents in Unity that run fully locally. Connects to local speech-to-text and LLM chat servers over named pipes and exposes their events on a lightweight event bus.",
   "unity": "6000.0",
