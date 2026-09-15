@@ -1,10 +1,3 @@
-# Changelog
-All notable changes to this package will be documented in this file.
-
-The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
-and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
-
-## [0.2.0] 2026-09-14
 ### Named-pipe STT + chat clients
 - Replaced the WebRTC/Pipecat proof-of-concept with a named-pipe based client (`ToolClient`) that talks to local `stt` and `chat` tool servers
 - `SttClient`: streaming speech-to-text with device selection, works in Edit mode and Play mode; custom Inspector with an audio-device dropdown
@@ -13,11 +6,3 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - UI helpers: `SttTranscriptionDisplay`, `ChatDisplay`, `SttStateIcon`
 - "Voice Agent Demo" sample scene importable from the Package Manager
 - Dropped the `com.unity.webrtc` dependency and the bundled Pipecat `Agent/` Python server
-
-## [0.1.0] 2026-03-01
-
-### Pre-release: Proof-of-concept
-- Communicates with pre-running Pipecat server from Unity via WebRTC
-- Microphone input while in Play Mode is sent to Pipecat
-- Displays a transcription of the user's speech as well as the Agent's LLM response
-- Assumes a pre-running Pipecat server and inference service

@@ -1,68 +1,85 @@
-# Voice Agents for Unity
+# Voice Agents
 
-**Voice Agents for Unity** is a package for building open-source AI voice agents that run fully locally with realtime latency.
+Voice Agents (`com.stefanwebb.voiceagents`) is a Unity package for building open-source AI voice agents that run fully locally.
 
-It is built on top of:
-* [Pipecat](https://github.com/pipecat-ai/pipecat); 
-* [Local voice agents on MacOS with Pipecat](https://github.com/kwindla/macos-local-voice-agents/tree/main);
-* [WebRTC for Unity](https://github.com/Unity-Technologies/com.unity.webrtc);
-* Open-source inference libraries such as [vLLM](https://github.com/vllm-project/vllm); and,
-* Open-source models from the [Hugging Face Hub](https://huggingface.co/models).
+You can use it to build intelligent non-player characters (NPCs), voice-driven game interfaces, and more.
 
-You can use it to build intelligent non-player characters (NPCs), game interfaces, among many other applications.
+The package connects Unity to local **speech-to-text (STT)** and **LLM chat** servers over named pipes, and exposes everything as typed events on a lightweight event bus so your gameplay code never touches the transport.
 
-It is currently a proof-of-concept and requires several improvements before it's ready for use in game development.
+> Text-to-speech (TTS) is not yet implemented — see [Limitations](#limitations).
 
-## Instructions
-### Install package
-First, install the package in your project along with the provided sample. Open the Package Manager and under the `+` dropdown select "Install package from git URL". Enter:
+## How it works
+
 ```
-https://github.com/stefanwebb/unity-voice-agents.git
-```
-Confirm that the package is present in your Project window under `Packages/com.stefanwebb.voiceagents` and the sample under `Samples/Example`
-
-### Inference Server
-Next, you need to launch a server for local LLM inference for use by the Agent. The inference server is called from Pipecat (architectural diagram coming soon!)
-
-You can use any OpenAI `Completions API` compatible server, for example:
-* [HuggingFace Transformers](https://huggingface.co/docs/transformers/main/en/serving)
-* [LM Studio](https://lmstudio.ai/docs/developer/openai-compat)
-* [LocalAI](https://localai.io/features/text-generation/)
-* [Ollama](https://docs.ollama.com/cli)
-* [vLLM](https://github.com/vllm-project/vllm)
-* [vLLM-MLX](https://github.com/waybarrios/vllm-mlx)
-
-Choose the option that is most convenient for your platform and follow the instructions there to install and launch the server. It must be hosted at `http://127.0.0.1:1234` since the configuration is currently hardcoded.
-
-As I am on Mac, I'm using vLLM-MLX and my launch command is:
-```bash
-vllm-mlx serve mlx-community/Llama-3.2-3B-Instruct-4bit --port 1234
+ Microphone ─► named_pipes.stt server ─┐
+                                       │  /tmp/tool-stt, /tmp/tool-chat (FIFOs)
+ vLLM / any OpenAI-style LLM ◄─ named_pipes.chat server ─┘
+                                       ▲
+                                       │ ToolClient (JSON lines)
+                                       ▼
+   SttClient ──────► EventBus ◄────── ChatClient
+                       ▲   │
+       ConversationManager │  SttTranscriptionDisplay / ChatDisplay / SttStateIcon
+                       your scripts (raise commands, subscribe to events)
 ```
 
-### Pipecat Server
-After that, you need to launch a Pipecat server, which is where the Agent "lives". [Pipecat](https://github.com/pipecat-ai/pipecat) is a Python framework for building real-time voice and multimodal conversational agents.
+| Component | Role |
+|---|---|
+| `ToolClient` | C# client for the Named Pipe Tools protocol (`/tmp/tool-{name}`) |
+| `SttClient` | Connects to the `stt` tool; raises `SpeechStartEvent`, `SpeechEvent`, `TokenEvent`, `StateChangedEvent`, `DevicesEvent`…; forwards `StartCommandEvent`, `PauseCommandEvent`, `SetDeviceCommandEvent`…. Runs in Edit mode too, with a device dropdown in the Inspector |
+| `ChatClient` | Connects to the `chat` tool; raises streaming `ChatTokenEvent`, `ChatDoneEvent`, `ChatStateChangedEvent`; forwards `ChatCommandEvent` |
+| `ConversationManager` | Turns a `ConfirmedInputEvent` into a `ChatCommandEvent` with full history and optional system prompt |
+| `EventBus` | Static typed event bus (built on `GenericEventBus`) |
+| `SttTranscriptionDisplay`, `ChatDisplay`, `SttStateIcon` | Drop-in uGUI/TextMeshPro views |
 
-Follow the instructions on the Pipecat website to install it (which requires that Python is installed first, of course).
+## Requirements
 
-This package provides an example Pipecat server that runs on Mac and the launch command, from the project folder, is:
-```bash
-cd Packages/com.stefanwebb.voiceagents/Agent
-uv run agent.py
-```
+- Unity 6000.0 or later (uses `System.Text.Json`, available with the .NET Standard 2.1 profile)
+- macOS or Linux — `ToolClient` uses POSIX FIFOs (`mkfifo`) via `libc`
+- Running `stt` and `chat` tool servers from the companion `named_pipes` Python package (instructions to follow)
+- TextMeshPro essentials imported into your project (Window ▸ TextMeshPro ▸ Import TMP Essential Resources)
 
-### Sample Scene
-With the inference and Pipecat servers running, open the test scene in the sample and run Play Mode. If everything is working correctly, your speech will be transcribed and displayed in the Game window, passed to the LLM, and its response displayed as well. The conversation history accumulates as you talk to the agent, so this is effectively a voice chatbot.
+## Installation
+
+1. In Unity, open **Window ▸ Package Manager**.
+2. Click **+ ▸ Add package from git URL…** and enter:
+   ```
+   https://github.com/stefanwebb/unity-voice-agents.git
+   ```
+   (or **Add package from disk…** and pick this folder's `package.json`).
+3. Dependencies (`com.unity.ugui`, `com.unity.inputsystem`, `com.unity.render-pipelines.universal`) are pulled in automatically. If prompted to enable the new Input System, accept and restart the Editor.
+
+## Running the sample
+
+1. In Package Manager select **Voice Agents ▸ Samples** and click **Import** next to *Voice Agent Demo*.
+2. Start the `stt` and `chat` servers so `/tmp/tool-stt` and `/tmp/tool-chat` exist.
+3. Open `Assets/Samples/Voice Agents/<version>/Voice Agent Demo/SampleScene.unity`. The sample uses URP — if your project is not on URP, assign a URP asset in Graphics settings or ignore the post-processing volume.
+4. Select the **AgentManager** object: the `SttClient` inspector shows the connection state and lets you pick a microphone (works without entering Play mode). Paste a system prompt into `ConversationManager` if you like (`SystemPrompt.Text` in the sample is an example).
+5. Press **Play**, press **Space** and speak (the game pauses while you talk; the server detects when you stop), then press **Enter** to send the transcription to the LLM. The reply streams into the on-screen textbox — press **Enter** again to dismiss it and resume. The icon shows disconnected / listening / transcribing / thinking state.
+
+## Using it in your own scene
+
+1. Add `SttClient`, `ChatClient`, and `ConversationManager` to a GameObject.
+2. Raise commands and subscribe to events from any script:
+   ```csharp
+   using GenerativeGamedev;
+
+   void OnEnable()  => EventBus.SubscribeTo<ChatTokenEvent>(OnToken);
+   void OnDisable() => EventBus.UnsubscribeFrom<ChatTokenEvent>(OnToken);
+
+   void StartListening() => EventBus.Raise(new StartCommandEvent());
+   void Send(string text) => EventBus.Raise(new ConfirmedInputEvent { Text = text });
+   void OnToken(ref ChatTokenEvent e) => Debug.Log(e.Text);
+   ```
+3. See `docs/superpowers/specs/` for the design notes behind each component.
 
 ## Limitations
-To quickly develop a prototype, I have left the following limitations for future work:
 
-* In the provided Pipecat server, speech-to-text (STT) is "segmented" rather than streaming, which means a user's utterance isn't transcribed until the speaker has finished speaking. This gives the impression of a lower real-time latency.
-* In the provided server, there is no text-to-speech, interruption detection, or other voice agent components.
-* There is no signal to the user whether the connection to Pipecat is active or not so you have to read the debug console to know when it's ready for input.
-* A connection to Pipecat has to be re-established every time Play Mode is entered, which slows down development.
-* If disconnected from Pipecat in Play Mode, there is no way to re-connect without restarting Play Mode.
-* There is no way to pause the agent.
-* In the provided Pipecat server, the "agent" is just an LLM chatbot without tool calling, memory, planning, and so on.
-* The library momentarily hangs the main thread while connecting to Pipecat.
-* Parameters like the microphone index and server address are hardcoded.
-* Requires small modifications to Pipecat server to work on Windows and Linux.
+- No text-to-speech yet.
+- macOS/Linux only (named pipes).
+- No tool calling, memory, or planning on the LLM side — the "agent" is a chat completion with a system prompt.
+- Server setup and the `named_pipes` Python package are documented separately.
+
+## License
+
+CC BY-SA 4.0 — see [LICENSE.md](LICENSE.md).

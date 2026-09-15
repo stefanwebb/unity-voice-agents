@@ -1,36 +1,36 @@
 {
-	"name": "com.stefanwebb.voiceagents",
-	"displayName":"Voice Agents",
-	"version": "0.1.0",
-	"unity": "6000.3",
-	"unityRelease": "8f1",
-	"description": "Build open-source AI voice agents that run fully locally for intelligent NPCs and game interfaces.",
-	"dependencies": {
-		"com.unity.test-framework": "1.6.0",
-		"com.unity.webrtc": "3.0.0"
-	},
-	"keywords": [
-		"voiceai",
-		"ai",
-		"stt",
-		"llms",
-		"vllm",
-		"pipecat",
-		"npcs" 
-	],
-	"author": {
-	"name": "Stefan Webb",
-	"email": "info@stefanwebb.me",
-	"url": "https://gamedev.blog"
-	},
-	"samples": [
-        {
-            "displayName": "Simple Example",
-            "description": "An example scene that transcribes user speech, passes to an LLM, and displays to the response.",
-            "path": "Samples/Example"
-        }
-    ],
-	"documentationUrl": "https://github.com/stefanwebb/unity-voice-agents/tree/main/Documentation",
-	"changelogUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/CHANGELOG.md",
-	"licensesUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/LICENSE.md"
+  "name": "com.stefanwebb.voiceagents",
+  "version": "0.2.0",
+  "displayName": "Voice Agents",
+  "description": "Build AI voice agents in Unity that run fully locally. Connects to local speech-to-text and LLM chat servers over named pipes and exposes their events on a lightweight event bus.",
+  "unity": "6000.0",
+  "documentationUrl": "https://github.com/stefanwebb/unity-voice-agents#readme",
+  "changelogUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/stefanwebb/unity-voice-agents/blob/main/LICENSE.md",
+  "dependencies": {
+    "com.unity.ugui": "2.0.0",
+    "com.unity.inputsystem": "1.11.0",
+    "com.unity.render-pipelines.universal": "17.0.0",
+    "com.unity.modules.vectorgraphics": "1.0.0"
+  },
+  "keywords": [
+    "voiceai",
+    "ai",
+    "stt",
+    "llms",
+    "vllm",
+    "npcs"
+  ],
+  "author": {
+    "name": "Stefan Webb",
+    "email": "info@stefanwebb.me",
+    "url": "https://gamedev.blog"
+  },
+  "samples": [
+    {
+      "displayName": "Voice Agent Demo",
+      "description": "Sample scene: press Space to speak, Enter to confirm the transcription, and the LLM replies. Requires the named-pipe stt and chat servers to be running.",
+      "path": "Samples~/VoiceAgentDemo"
+    }
+  ]
 }

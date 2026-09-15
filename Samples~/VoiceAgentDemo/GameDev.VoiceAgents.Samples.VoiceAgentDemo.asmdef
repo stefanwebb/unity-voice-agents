@@ -1,0 +1,17 @@
+{
+    "name": "GameDev.VoiceAgents.Samples.VoiceAgentDemo",
+    "rootNamespace": "GenerativeGamedev.Samples",
+    "references": [
+        "GameDev.VoiceAgents",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

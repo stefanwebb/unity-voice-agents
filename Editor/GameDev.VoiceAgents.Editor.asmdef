@@ -1,0 +1,18 @@
+{
+    "name": "GameDev.VoiceAgents.Editor",
+    "rootNamespace": "GenerativeGamedev",
+    "references": [
+        "GameDev.VoiceAgents"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
