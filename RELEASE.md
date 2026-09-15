@@ -1,2 +1,2 @@
-### Bug fixes
-- Sample scene: input actions and the post-processing volume profile now resolve after import. The sample's `InputSystem_Actions.inputactions`, `SampleScene.unity` and `SampleSceneProfile.asset` carried the fixed GUIDs Unity's project template assigns to those files, so importing the sample into a template-based project collided with the project's own copies and the scene's references broke. They are now `VoiceAgentDemoActions.inputactions`, `VoiceAgentDemo.unity` and `VoiceAgentDemoProfile.asset` with unique GUIDs. **If you imported an earlier version, remove `Assets/Samples/Voice Agents/<old version>` and re-import.**
+### Improvements
+- Sample scene: `PlayerController` is back to plain `InputActionReference` fields (**Speech Start Action**, **Confirm Action**). The `Actions` asset and action-name fields added in 0.2.2 were a workaround for what turned out to be the GUID collision fixed in 0.2.3, and are removed.
