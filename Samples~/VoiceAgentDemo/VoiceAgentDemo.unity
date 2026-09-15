@@ -1902,9 +1902,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ca1c7b4a6df5d41aba54bef4251e73ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GenerativeGamedev.PlayerController
-  _actions: {fileID: -944628639613478452, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
-  _speechStartActionName: Player/StartSpeech
-  _confirmActionName: Player/ConfirmInput
   _speechStartAction: {fileID: 7708618775343873207, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
   _confirmAction: {fileID: -1320005915675450210, guid: 2dbfb336ae2c4f5ea571dab9b6b76866, type: 3}
   _speechContent: {fileID: 1778121645}

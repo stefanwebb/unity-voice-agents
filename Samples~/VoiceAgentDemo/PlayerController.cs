@@ -3,12 +3,6 @@
 //
 // Handles speech input actions. Space starts STT; a confirm action accepts the
 // transcription. Attach to the PlayerController object and wire up Inspector fields.
-//
-// Actions are resolved by name from the InputActionAsset on every OnEnable rather
-// than through cached InputActionReferences: with "Enter Play Mode Options" /
-// domain reload disabled (the Unity 6 default), a reference's cached InputAction
-// can outlive the Input System's play-mode reset and its callbacks stop firing.
-// The InputActionReference fields remain as a fallback.
 
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,47 +11,27 @@ namespace GenerativeGamedev {
 
 public class PlayerController : MonoBehaviour
 {
-    [SerializeField] private InputActionAsset _actions;
-    [SerializeField] private string _speechStartActionName = "Player/StartSpeech";
-    [SerializeField] private string _confirmActionName = "Player/ConfirmInput";
-    [Tooltip("Fallback used only if the name lookup above fails.")]
     [SerializeField] private InputActionReference _speechStartAction;
-    [Tooltip("Fallback used only if the name lookup above fails.")]
     [SerializeField] private InputActionReference _confirmAction;
     [SerializeField] private GameObject _speechContent;
     [SerializeField] private GameObject _agentContent;
 
-    private InputAction _speechStart;
-    private InputAction _confirm;
     private bool _hasPendingInput;
     private string _pendingText;
     private bool _streamingDone;
 
-    private InputAction ResolveAction(string name, InputActionReference fallback)
-    {
-        var action = _actions != null ? _actions.FindAction(name) : null;
-        if (action == null && fallback != null)
-            action = fallback.action;
-        if (action == null)
-            Debug.LogError($"[PlayerController] could not resolve input action '{name}': " +
-                "assign an InputActionAsset containing it, or an InputActionReference fallback.", this);
-        return action;
-    }
-
     private void OnEnable()
     {
-        _speechStart = ResolveAction(_speechStartActionName, _speechStartAction);
-        if (_speechStart != null)
+        if (_speechStartAction != null)
         {
-            _speechStart.Enable();
-            _speechStart.performed += OnSpeechStart;
+            _speechStartAction.action.Enable();
+            _speechStartAction.action.performed += OnSpeechStart;
         }
 
-        _confirm = ResolveAction(_confirmActionName, _confirmAction);
-        if (_confirm != null)
+        if (_confirmAction != null)
         {
-            _confirm.Enable();
-            _confirm.performed += OnConfirmInput;
+            _confirmAction.action.Enable();
+            _confirmAction.action.performed += OnConfirmInput;
         }
 
         EventBus.SubscribeTo<SpeechEndEvent>(OnSpeechEnd);
@@ -69,18 +43,16 @@ public class PlayerController : MonoBehaviour
     private void OnDisable()
     {
         Time.timeScale = 1f;
-        if (_speechStart != null)
+        if (_speechStartAction != null)
         {
-            _speechStart.performed -= OnSpeechStart;
-            _speechStart.Disable();
-            _speechStart = null;
+            _speechStartAction.action.performed -= OnSpeechStart;
+            _speechStartAction.action.Disable();
         }
 
-        if (_confirm != null)
+        if (_confirmAction != null)
         {
-            _confirm.performed -= OnConfirmInput;
-            _confirm.Disable();
-            _confirm = null;
+            _confirmAction.action.performed -= OnConfirmInput;
+            _confirmAction.action.Disable();
         }
 
         EventBus.UnsubscribeFrom<SpeechEndEvent>(OnSpeechEnd);
