@@ -6,8 +6,6 @@
 // a thinking icon while the chat server is inferring a response. Attach
 // directly to the GameObject holding the RawImage component. Pure
 // EventBus consumer — no dependency on SttClient itself.
-// See docs/superpowers/specs/2026-06-24-stt-state-icon-design.md
-// and docs/superpowers/specs/2026-06-26-chat-display-design.md.
 
 using UnityEngine;
 using UnityEngine.UI;

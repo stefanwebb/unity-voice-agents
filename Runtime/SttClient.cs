@@ -7,8 +7,6 @@
 // a GameObject in your scene; configure it from the Inspector. Runs in both
 // Editor mode and Play mode ([ExecuteAlways]) so you can connect, pick a
 // device, and see live status without pressing Play.
-// See docs/superpowers/specs/2026-06-23-stt-client-editor-mode-design.md
-// and docs/superpowers/specs/2026-06-23-stt-pause-on-exit-play-design.md.
 
 using System;
 using System.Collections.Concurrent;

@@ -4,7 +4,6 @@
 // Maintains conversation history and bridges confirmed STT input to the chat server.
 // Appends user turns on ConfirmedInputEvent, fires ChatCommandEvent with full history,
 // accumulates streaming reply tokens, and closes the assistant turn on ChatDoneEvent.
-// See docs/superpowers/specs/2026-06-26-conversation-manager-design.md.
 
 using System.Collections.Generic;
 using System.Text;

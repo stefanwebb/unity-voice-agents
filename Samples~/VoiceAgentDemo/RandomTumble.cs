@@ -3,7 +3,6 @@
 //
 // Continuously tumbles this GameObject toward new random orientations.
 // Standalone — no dependency on any other part of this project.
-// See docs/superpowers/specs/2026-06-24-random-tumble-design.md.
 
 using UnityEngine;
 

@@ -4,7 +4,6 @@
 // Shows the live STT transcription in a TextMeshPro UI text box. Attach
 // directly to the GameObject holding the TextMeshProUGUI component. Pure
 // EventBus consumer — no connection-state awareness, Play-mode only.
-// See docs/superpowers/specs/2026-06-24-stt-transcription-display-design.md.
 
 using TMPro;
 using UnityEngine;

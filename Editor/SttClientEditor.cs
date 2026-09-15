@@ -5,7 +5,6 @@
 // of audio devices, populated from SttClient.Devices/SelectedDevice. Lives
 // in an Editor folder so it compiles into Assembly-CSharp-Editor and never
 // ships in a build.
-// See docs/superpowers/specs/2026-06-23-stt-client-editor-mode-design.md.
 
 using UnityEditor;
 using UnityEngine;

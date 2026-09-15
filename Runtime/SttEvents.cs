@@ -2,7 +2,6 @@
 // Licensed under CC BY-SA 4.0
 //
 // Event structs raised on EventBus for every named_pipes.stt server message.
-// See docs/superpowers/specs/2026-06-22-stt-client-design.md.
 
 namespace GenerativeGamedev {
 

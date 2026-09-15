@@ -20,3 +20,6 @@
 /[Oo]bj/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
+
+# Design notes (not part of the package)
+docs/**

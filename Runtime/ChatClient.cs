@@ -5,7 +5,6 @@
 // forwards every server event onto EventBus as a typed struct, and forwards
 // ChatCommandEvent on EventBus to the server as a 'chat' command. Place this
 // on a GameObject in your scene; configure it from the Inspector.
-// See docs/superpowers/specs/2026-06-26-chat-client-design.md.
 
 using System;
 using System.Collections.Concurrent;

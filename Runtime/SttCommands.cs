@@ -3,7 +3,6 @@
 //
 // Outbound command events for the named_pipes.stt server. Any script raises
 // one of these on EventBus; SttClient forwards it to the server.
-// See docs/superpowers/specs/2026-06-23-stt-client-monobehaviour-design.md.
 
 namespace GenerativeGamedev {
 

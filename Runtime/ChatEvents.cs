@@ -2,7 +2,6 @@
 // Licensed under CC BY-SA 4.0
 //
 // Event structs raised on EventBus for every named_pipes.chat server message.
-// See docs/superpowers/specs/2026-06-26-chat-client-design.md.
 
 namespace GenerativeGamedev {
 

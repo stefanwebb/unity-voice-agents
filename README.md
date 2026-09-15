@@ -71,7 +71,6 @@ The package connects Unity to local **speech-to-text (STT)** and **LLM chat** se
    void Send(string text) => EventBus.Raise(new ConfirmedInputEvent { Text = text });
    void OnToken(ref ChatTokenEvent e) => Debug.Log(e.Text);
    ```
-3. See `docs/superpowers/specs/` for the design notes behind each component.
 
 ## Limitations
 
