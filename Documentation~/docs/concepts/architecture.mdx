@@ -1,0 +1,107 @@
+---
+title: "How Voice Agents Connects Unity to Local AI Servers"
+sidebarTitle: "Architecture"
+description: "Explore how SttClient, ChatClient, ConversationManager, and EventBus work together to bring fully-local AI voice to your Unity game."
+---
+
+Voice Agents bridges Unity to two lightweight server processes — a speech-to-text (STT) server and a chat server — that run on the same machine as your editor or built game. All communication happens over POSIX named pipes (FIFOs), and everything your gameplay scripts ever touch is a typed C# event on a static `EventBus`. You never write socket code, manage threads by hand, or import a transport library — the package handles all of that for you.
+
+<Note>
+Voice Agents requires **macOS or Linux**. The named-pipe transport relies on POSIX `mkfifo` via `libc`, which is not available on Windows.
+</Note>
+
+## System diagram
+
+```
+ Microphone ─► named_pipes.stt server ─┐
+                                        │  /tmp/tool-stt, /tmp/tool-chat (FIFOs)
+ vLLM / any OpenAI-style LLM ◄─ named_pipes.chat server ─┘
+                                        ▲
+                                        │ ToolClient (JSON lines)
+                                        ▼
+   SttClient ──────► EventBus ◄────── ChatClient
+                       ▲   │
+       ConversationManager │  SttTranscriptionDisplay / ChatDisplay / SttStateIcon
+                       your scripts (raise commands, subscribe to events)
+```
+
+The player's microphone feeds the `named_pipes.stt` server. The chat server sits in front of any OpenAI-compatible LLM (vLLM, Ollama, llama.cpp, etc.). Both servers expose their functionality as named pipes under `/tmp/`. Inside Unity, `SttClient` and `ChatClient` connect to those pipes using `ToolClient` and translate every server message into a typed event on the `EventBus`. Your gameplay scripts subscribe to those events and raise command events in return — no direct references to the transport components needed.
+
+## Component overview
+
+| Component | Role |
+|---|---|
+| `ToolClient` | Low-level named-pipe protocol client — sends JSON-line commands, receives JSON-line events |
+| `SttClient` | Connects to the `stt` tool; raises typed STT events; forwards STT commands. Runs in Edit Mode |
+| `ChatClient` | Connects to the `chat` tool; streams LLM tokens as `ChatTokenEvent` |
+| `ConversationManager` | Maintains history; converts `ConfirmedInputEvent` into a `ChatCommandEvent` |
+| `EventBus` | Static typed event bus — all inter-component communication goes through here |
+| UI helpers | `SttTranscriptionDisplay`, `ChatDisplay`, `SttStateIcon` — drop-in TextMeshPro/uGUI views |
+
+## Named pipe protocol
+
+The two servers listen for commands on an **upstream FIFO** at `/tmp/tool-{name}` (e.g. `/tmp/tool-stt` and `/tmp/tool-chat`). When a `ToolClient` connects, it creates a **per-process downstream FIFO** at `/tmp/tool-{name}-{pid}` so the server can send events back to that specific client. All messages in both directions are newline-delimited JSON objects — one JSON object per line.
+
+Commands sent to the server carry the client PID and a `cmd` field:
+
+```json
+{"pid": 12345, "cmd": "start"}
+```
+
+Events sent back by the server carry an `event` field:
+
+```json
+{"event": "state_changed", "state": "listening"}
+```
+
+`ToolClient` creates and cleans up its downstream FIFO automatically; you never need to manage the files yourself.
+
+## Connection lifecycle
+
+Both `SttClient` and `ChatClient` manage their own connections entirely in the background. When the component is enabled, a connect loop thread starts and attempts to open the upstream FIFO. If the server isn't running yet, it retries every 3 seconds (configurable via `Reconnect Interval Seconds` in the Inspector) until it succeeds.
+
+Once connected, a separate **heartbeat thread** pings the server every **5 seconds** (configurable via `Ping Interval Seconds`). If no `pong` reply arrives within **10 seconds** (configurable via `Pong Timeout Seconds`), the connection is force-closed and the connect loop immediately starts trying to reconnect. This is necessary because named-pipe FIFOs opened in read-write mode never deliver EOF when the remote process dies, so an active ping is the only reliable way to detect a dead server.
+
+When a connection is established or lost, the clients raise `SttConnectionChangedEvent` or `ChatConnectionChangedEvent` on the `EventBus` so your UI can react accordingly.
+
+## End-to-end data flow
+
+Here is the complete journey from the player pressing a key to the LLM reply appearing on screen:
+
+<Steps>
+
+### Player presses a key — script raises `StartCommandEvent`
+
+Your input handler calls `EventBus.Raise(new StartCommandEvent())`. Because `SttClient` subscribes to this event, it immediately forwards a `start` command to the STT server over the named pipe.
+
+### STT server transcribes speech
+
+The STT server starts listening to the microphone. As it detects speech, it sends events back through the downstream FIFO. `SttClient` translates these into typed events raised on the `EventBus`:
+
+- `SpeechStartEvent` — voice activity detected
+- `TokenEvent { Text }` — a partial transcription token (for live display)
+- `SpeechEndEvent` — voice activity stopped
+- `SpeechEvent { Text, Words[] }` — final confirmed transcription with word-level timestamps
+- `StateChangedEvent { State }` — recognizer state machine transitions (`Ready`, `Loading`, `Listening`, `Transcribing`, `Paused`, `Error`)
+
+### Player confirms — script raises `ConfirmedInputEvent`
+
+Your UI (or an automatic pipeline) raises `EventBus.Raise(new ConfirmedInputEvent { Text = "Tell me about this dungeon." })`. `ConversationManager` is subscribed to this event.
+
+### ConversationManager builds history and raises `ChatCommandEvent`
+
+`ConversationManager` appends the user turn to its internal history list, prepends the configured system prompt, then raises `ChatCommandEvent { Messages }` with the full conversation history included.
+
+### ChatClient sends to the LLM — streams reply tokens
+
+`ChatClient` is subscribed to `ChatCommandEvent`. It serialises the message array to JSON and sends a `chat` command to the chat server. The LLM streams tokens back; for each one, `ChatClient` raises `ChatTokenEvent { Text }` on the `EventBus`. When streaming is complete, it raises `ChatDoneEvent`.
+
+### `ConversationManager` closes the assistant turn
+
+`ConversationManager` accumulates every `ChatTokenEvent` into a buffer, then on `ChatDoneEvent` appends the complete assistant reply to the history, ready for the next turn.
+
+</Steps>
+
+## What runs in Edit Mode
+
+`SttClient` is decorated with `[ExecuteAlways]`, which means it connects to the STT server even when you are not in Play Mode. This lets you verify your microphone selection and watch the connection state indicator in the Inspector without pressing Play. `ChatClient` and `ConversationManager` are standard `MonoBehaviour` components and only run during Play Mode.

@@ -1,0 +1,115 @@
+---
+title: "Import and Run the Voice Agent Demo Scene in Unity"
+sidebarTitle: "Demo Scene"
+description: "Import the Voice Agent Demo sample from Package Manager to see SttClient, ChatClient, and all UI helpers working together in a pre-wired scene."
+---
+
+Voice Agents ships a complete, ready-to-run sample called **Voice Agent Demo**. It contains a pre-wired scene with every core component — `SttClient`, `ChatClient`, `ConversationManager` — and all three UI helpers, hooked up to a `PlayerController` that uses Unity's Input System to handle Space-to-listen and Enter-to-confirm input (configured in `VoiceAgentDemoActions.inputactions`). Importing and running the demo is the fastest way to verify your server setup and explore how the package fits together before building your own scene.
+
+## Prerequisites
+
+- Voice Agents package installed (see the [README](https://github.com/stefanwebb/unity-voice-agents#readme) for installation)
+- STT and chat servers running with FIFOs present at `/tmp/tool-stt` and `/tmp/tool-chat` (see [Server Setup](/Documentation~/guides/server-setup))
+- TextMeshPro Essentials imported into your project
+
+## Import and run
+
+<Steps>
+  <Step title="Open Package Manager">
+    In Unity, go to **Window ▸ Package Manager**. In the package list, find and select **Voice Agents**. If you installed from a Git URL, it appears under **In Project**.
+  </Step>
+
+  <Step title="Import the Voice Agent Demo sample">
+    With Voice Agents selected, click the **Samples** tab in the right-hand detail panel. Click **Import** next to *Voice Agent Demo*. Unity copies the sample files into your project at:
+
+    ```
+    Assets/Samples/Voice Agents/<version>/Voice Agent Demo/
+    ```
+
+    You will see the assets appear in the Project window under that path.
+  </Step>
+
+  <Step title="Start the STT and chat servers">
+    Before entering Play mode, make sure both servers are running. Confirm that `/tmp/tool-stt` and `/tmp/tool-chat` exist. See [Server Setup](/Documentation~/guides/server-setup) for details.
+  </Step>
+
+  <Step title="Open the demo scene">
+    In the Project window, navigate to `Assets/Samples/Voice Agents/<version>/Voice Agent Demo/` and double-click **VoiceAgentDemo.unity** to open it.
+
+    The demo uses the Universal Render Pipeline. If your project is not configured for URP, Unity may warn about a missing URP asset in the post-processing volume. Either assign a URP Renderer asset in **Edit ▸ Project Settings ▸ Graphics**, or dismiss the warning — the voice agent functionality works independently of rendering setup.
+  </Step>
+
+  <Step title="Verify connection in Edit mode">
+    Select the **AgentManager** object in the Hierarchy. In the Inspector, check the **SttClient** component — because `SttClient` uses `[ExecuteAlways]`, it connects to the STT server even before you press Play.
+
+    <Tip>
+    You can pick your microphone device from the dropdown that appears on `SttClient` in Edit mode. The device selection takes effect immediately, so you can confirm the correct input is chosen without entering Play mode.
+    </Tip>
+
+    The **Is Connected Debug** checkbox on both `SttClient` and `ChatClient` should tick to `true` within a few seconds if the servers are running.
+  </Step>
+
+  <Step title="Customise the system prompt (optional)">
+    Still on `AgentManager`, select the **ConversationManager** component. The **System Prompt** field is pre-filled with a Game Master persona (see `SystemPrompt.cs` in the sample for the full text). Replace it with any persona you like — for example:
+
+    ```
+    You are a wise elven librarian. Answer questions about the world's history in two sentences or fewer.
+    ```
+  </Step>
+
+  <Step title="Press Play">
+    Click **Play**. The spinning cube scene loads and the game begins in a running state.
+  </Step>
+
+  <Step title="Start speaking">
+    Press **Space**. The game pauses (`Time.timeScale = 0`), the speech panel appears, and the STT server begins listening. Speak your question or command — the server detects when you stop talking and raises `SpeechEndEvent`, which automatically pauses the microphone.
+  </Step>
+
+  <Step title="Confirm the transcription">
+    Your spoken text appears in the transcription panel. Press **Enter** to confirm it. `ConversationManager` packages the text with the system prompt and conversation history, then raises `ChatCommandEvent`. The LLM begins inferring and tokens stream into the agent response panel in real time.
+  </Step>
+
+  <Step title="Dismiss the reply and resume">
+    Once the LLM finishes (`ChatDoneEvent` fires), press **Enter** again. The agent panel hides, `Time.timeScale` returns to 1, and the game resumes. The exchange has been added to the conversation history — your next message will carry the full context.
+  </Step>
+
+  <Step title="Read the state icon">
+    The icon in the top-left of the screen reflects the current connection and recognition state:
+
+    | Icon state | Meaning |
+    |---|---|
+    | Disconnected | `SttClient` is not yet connected to the server |
+    | Listening | Microphone is active; server is detecting speech |
+    | Transcribing | Speech detected; model is converting audio to text |
+    | Thinking | Transcription confirmed; LLM is generating a reply |
+  </Step>
+</Steps>
+
+## Demo scene structure
+
+The demo scene is deliberately simple so every component is easy to find:
+
+| GameObject | Components |
+|---|---|
+| **AgentManager** | `SttClient`, `ChatClient`, `ConversationManager` |
+| **SpeechCanvas** | Canvas (Screen Space – Overlay) containing `SttTranscriptionDisplay` and `SttStateIcon` |
+| **AgentCanvas** | Canvas containing `ChatDisplay` for the streaming LLM reply |
+| **PlayerController** | `PlayerController` script — handles Space/Enter input via `VoiceAgentDemoActions.inputactions` and `Time.timeScale` |
+| **SystemPrompt** | GameObject carrying the pre-written Game Master persona string used by `ConversationManager` |
+
+## Key bindings
+
+| Key | Action |
+|---|---|
+| **Space** | Start speech recognition (pauses the game) |
+| **Enter** (after speaking) | Confirm transcription and send to the LLM |
+| **Enter** (after LLM reply) | Dismiss the reply panel and resume gameplay |
+
+## Re-importing after a package update
+
+<Warning>
+If you previously imported an older version of the sample, Unity retains the old assets under `Assets/Samples/Voice Agents/<old version>/`. GUID conflicts can cause unexpected behaviour if both versions are present simultaneously. Delete the old version folder before importing the new one:
+
+1. In the Project window, right-click `Assets/Samples/Voice Agents/<old version>` and choose **Delete**.
+2. Return to Package Manager and import the current version's sample.
+</Warning>

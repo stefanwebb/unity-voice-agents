@@ -1,0 +1,115 @@
+---
+title: "ChatClient: Stream LLM Responses in Unity"
+sidebarTitle: "ChatClient"
+description: "ChatClient is a MonoBehaviour that connects to your local LLM chat server and streams AI responses token by token through the EventBus."
+---
+
+`ChatClient` is the bridge between your Unity scene and the local large language model server. It maintains a persistent background connection to the `chat` tool server, listens for `ChatCommandEvent` on the `EventBus`, serializes the message array, and streams the model's response back one token at a time as `ChatTokenEvent`. A final `ChatDoneEvent` signals that the full reply has arrived. The connection is monitored with the same ping/pong heartbeat used by `SttClient`, so dropped connections are detected and automatically re-established.
+
+<Note>
+Only **one** `ChatClient` can be active at a time. If a second instance is enabled, it immediately disables itself and logs an error: `[ChatClient] another ChatClient ('...') is already active; disabling this one to avoid two connections corrupting the same named pipe.` Keep a single `ChatClient` in your scene hierarchy.
+</Note>
+
+## Add to Your Scene
+
+Place `ChatClient` on any GameObject in your scene — typically the same object that holds `SttClient` and `ConversationManager` so all three voice agent components are co-located. The component registers itself as the single active instance on `OnEnable` and disconnects gracefully on `OnDisable`.
+
+<Tip>
+For most use cases you should not raise `ChatCommandEvent` directly. Use [`ConversationManager`](/Documentation~/components/conversation-manager) instead — it maintains multi-turn history, injects your system prompt, and fires `ChatCommandEvent` automatically whenever the player's speech is confirmed.
+</Tip>
+
+## Inspector Properties
+
+Configure `ChatClient` from the Inspector without writing any code.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| **Tool Name** | string | `"chat"` | The name of the tool server to connect to. Must match the server's registered name. |
+| **Reconnect Interval Seconds** | float | `3` | How long (in seconds) to wait before attempting a reconnect after losing the connection. |
+| **Ping Interval Seconds** | float | `5` | How frequently (in seconds) to send a heartbeat ping to the server. |
+| **Pong Timeout Seconds** | float | `10` | If no pong is received within this window after a ping, the connection is considered dead and a reconnect is triggered. |
+| **Is Connected Debug** | bool | — | Read-only. Mirrors the current connection state so you can see it at a glance in the Inspector. |
+
+## Events Raised on the EventBus
+
+`ChatClient` raises the following events. Subscribe to them from any `MonoBehaviour` using `EventBus.SubscribeTo<T>`.
+
+| Event | Fields | Description |
+|---|---|---|
+| `ChatTokenEvent` | `string Text` | One streaming token of the LLM's reply. Tokens arrive in order and should be concatenated to build the full response. |
+| `ChatDoneEvent` | — | The LLM has finished generating its response. All tokens have been delivered. |
+| `ChatStateChangedEvent` | `ChatState State` | The chat server's state has changed. Possible values: `Idle`, `Inferring`, `Error`. |
+| `ChatConnectionChangedEvent` | `bool Connected` | Fired whenever the connection to the chat server is established or lost. |
+
+## Commands It Responds To
+
+Raise the following event on the `EventBus` to send a conversation to the LLM. `ChatClient` forwards it to the server.
+
+| Command Event | Fields | Description |
+|---|---|---|
+| `ChatCommandEvent` | `ChatMessage[] Messages` | Send a full conversation to the LLM. Each `ChatMessage` has a `Role` (`"system"`, `"user"`, or `"assistant"`) and `Content` string. |
+
+`ChatClient` silently ignores `ChatCommandEvent` while the server is already in the `Inferring` state and logs a warning. Always wait for `ChatDoneEvent` before sending another message.
+
+## Sending a Chat Message Directly
+
+If you need to drive the LLM from code without using `ConversationManager`, build a `ChatMessage` array and raise `ChatCommandEvent`:
+
+```csharp
+var messages = new ChatMessage[]
+{
+    new ChatMessage { Role = "system", Content = "You are a helpful dungeon guide." },
+    new ChatMessage { Role = "user",   Content = "What is behind the door?" }
+};
+EventBus.Raise(new ChatCommandEvent { Messages = messages });
+```
+
+## Streaming Pattern
+
+Collect tokens into a `StringBuilder` as they arrive and act on `ChatDoneEvent` when the full response is ready:
+
+```csharp
+using System.Text;
+using GenerativeGamedev;
+using UnityEngine;
+
+public class ChatResponseHandler : MonoBehaviour
+{
+    private readonly StringBuilder _buffer = new();
+
+    void OnEnable()
+    {
+        EventBus.SubscribeTo<ChatTokenEvent>(OnToken);
+        EventBus.SubscribeTo<ChatDoneEvent>(OnDone);
+        EventBus.SubscribeTo<ChatStateChangedEvent>(OnState);
+    }
+
+    void OnDisable()
+    {
+        EventBus.UnsubscribeFrom<ChatTokenEvent>(OnToken);
+        EventBus.UnsubscribeFrom<ChatDoneEvent>(OnDone);
+        EventBus.UnsubscribeFrom<ChatStateChangedEvent>(OnState);
+    }
+
+    void OnToken(ref ChatTokenEvent e) => _buffer.Append(e.Text);
+
+    void OnDone(ref ChatDoneEvent e)
+    {
+        Debug.Log($"Full reply: {_buffer}");
+        _buffer.Clear();
+    }
+
+    void OnState(ref ChatStateChangedEvent e) =>
+        Debug.Log($"Chat state: {e.State}");
+}
+```
+
+## Re-entrant Send Guard
+
+`ChatClient` tracks the current `ChatState` internally. If `ChatCommandEvent` is raised while the state is `ChatState.Inferring`, the event is dropped and a warning is logged:
+
+```
+[ChatClient] cannot send 'chat': already inferring.
+```
+
+If the connection drops while a generation is in progress, `ChatClient` raises `ChatStateChangedEvent { State = ChatState.Error }` so your UI can react accordingly.

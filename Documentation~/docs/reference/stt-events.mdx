@@ -1,0 +1,286 @@
+---
+title: "STT Events Reference for Voice Agents Unity Package"
+sidebarTitle: "STT Events"
+description: "Complete reference for all speech-to-text events raised on the EventBus by SttClient, including state changes, transcription, and device events."
+---
+
+`SttClient` translates every message from the local STT server into a typed event struct and raises it on the shared `EventBus`. Any MonoBehaviour — or any static class — can subscribe to these events without holding a direct reference to `SttClient`. The sections below describe every event type, its fields, and how to subscribe to it.
+
+## Supporting Types
+
+Before diving into the events, it helps to understand the two supporting types that appear as field types across several events.
+
+### SttState Enum
+
+Represents the lifecycle state of the STT server. `StateChangedEvent` carries one of these values whenever the server transitions.
+
+| Value | Meaning |
+|---|---|
+| `Ready` | The server is connected and idle, waiting to be started. |
+| `Loading` | The server is loading a model or initialising resources. |
+| `Listening` | The server is actively capturing microphone audio. |
+| `Transcribing` | Audio capture has ended and the server is generating the transcript. |
+| `Paused` | Listening has been paused (e.g. after a `PauseCommandEvent`). |
+| `Error` | The server has encountered an unrecoverable error. |
+
+### AudioDevice
+
+Represents a single audio input device reported by the STT server.
+
+<ParamField path="Index" type="int">
+  The zero-based device index as reported by the operating system audio layer.
+</ParamField>
+
+<ParamField path="Name" type="string">
+  The human-readable name of the audio device (e.g. `"Built-in Microphone"`).
+</ParamField>
+
+<ParamField path="Channels" type="int">
+  The number of input channels the device supports (typically `1` for mono microphones).
+</ParamField>
+
+### AlignedWord
+
+A single word from a final transcription together with its timestamps. Appears in the `Words` array of `SpeechEvent`.
+
+<ParamField path="Word" type="string">
+  The transcribed word as a string.
+</ParamField>
+
+<ParamField path="Start" type="double">
+  The start timestamp of this word within the audio clip, in seconds.
+</ParamField>
+
+<ParamField path="End" type="double">
+  The end timestamp of this word within the audio clip, in seconds.
+</ParamField>
+
+---
+
+## Event Summary
+
+| Event | Key Fields | When Raised |
+|---|---|---|
+| `SpeechStartEvent` | — | Microphone detects start of speech |
+| `SpeechEndEvent` | — | Server detects end of speech |
+| `TokenEvent` | `Text` | Each partial transcription token arrives |
+| `SpeechEvent` | `Text`, `Words` | Final confirmed transcription is ready |
+| `StateChangedEvent` | `State` | STT server changes lifecycle state |
+| `DevicesEvent` | `Devices` | Response to `ListDevicesCommandEvent` |
+| `DeviceEvent` | `Device` | Response to `GetDeviceCommandEvent` |
+| `SttConnectionChangedEvent` | `Connected` | Connection to the STT server changes |
+
+---
+
+## Events
+
+### SpeechStartEvent
+
+Raised when the microphone detects the beginning of speech in the audio stream. This event carries no fields — its presence alone signals that the user has started speaking.
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<SpeechStartEvent>(OnSpeechStart);
+void OnDisable() => EventBus.UnsubscribeFrom<SpeechStartEvent>(OnSpeechStart);
+
+void OnSpeechStart(ref SpeechStartEvent e)
+{
+    Debug.Log("User started speaking.");
+}
+```
+
+---
+
+### SpeechEndEvent
+
+Raised when the STT server detects that the user has stopped speaking. Like `SpeechStartEvent`, this event has no fields.
+
+A common pattern after receiving `SpeechEndEvent` is to raise `PauseCommandEvent` immediately to stop the microphone from capturing further audio, then wait for the user to confirm the transcription before proceeding.
+
+<Note>
+  `SpeechEndEvent` is raised as soon as silence is detected. The final transcript arrives shortly afterwards in a separate `SpeechEvent`. Do not treat these two events as simultaneous.
+</Note>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<SpeechEndEvent>(OnSpeechEnd);
+void OnDisable() => EventBus.UnsubscribeFrom<SpeechEndEvent>(OnSpeechEnd);
+
+void OnSpeechEnd(ref SpeechEndEvent e)
+{
+    // Pause the microphone and wait for player to confirm the transcript.
+    EventBus.Raise(new PauseCommandEvent());
+}
+```
+
+---
+
+### TokenEvent
+
+Raised as each partial transcription token streams in from the STT server in real time. Use this event to show a live preview while the user is still speaking.
+
+<ParamField path="Text" type="string">
+  A single partial token from the in-progress transcription. Tokens arrive incrementally and should be appended to form the running preview text.
+</ParamField>
+
+<Note>
+  `TokenEvent` carries partial, provisional text. For the complete, final transcription, subscribe to `SpeechEvent` instead.
+</Note>
+
+```csharp
+using GenerativeGamedev;
+
+private string _liveTranscript = "";
+
+void OnEnable() => EventBus.SubscribeTo<TokenEvent>(OnToken);
+void OnDisable() => EventBus.UnsubscribeFrom<TokenEvent>(OnToken);
+
+void OnToken(ref TokenEvent e)
+{
+    _liveTranscript += e.Text;
+    transcriptLabel.text = _liveTranscript;
+}
+```
+
+---
+
+### SpeechEvent
+
+Raised with the final, confirmed transcription after the STT server finishes processing the captured audio. This is the event you should act on when sending the user's speech to the LLM.
+
+<ParamField path="Text" type="string">
+  The complete transcription of the user's utterance.
+</ParamField>
+
+<ParamField path="Words" type="AlignedWord[]">
+  An array of per-word timing data. Each entry contains the word string and its start/end timestamps in seconds. May be `null` if the STT server does not provide word-level alignment.
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+void OnDisable() => EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+
+void OnSpeech(ref SpeechEvent e)
+{
+    Debug.Log($"Transcribed: {e.Text}");
+
+    if (e.Words != null)
+    {
+        foreach (var w in e.Words)
+            Debug.Log($"  [{w.Start:F2}s – {w.End:F2}s] {w.Word}");
+    }
+}
+```
+
+---
+
+### StateChangedEvent
+
+Raised whenever the STT server transitions between lifecycle states. Subscribe to this event to drive UI indicators (e.g. a microphone icon that changes colour based on server state).
+
+<ParamField path="State" type="SttState">
+  The new state the STT server has entered. See the <a href="#sttstate-enum">SttState enum</a> above for the full list of values and their meanings.
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<StateChangedEvent>(OnStateChanged);
+void OnDisable() => EventBus.UnsubscribeFrom<StateChangedEvent>(OnStateChanged);
+
+void OnStateChanged(ref StateChangedEvent e)
+{
+    Debug.Log($"STT state → {e.State}");
+
+    micIcon.color = e.State switch
+    {
+        SttState.Listening    => Color.green,
+        SttState.Transcribing => Color.yellow,
+        SttState.Error        => Color.red,
+        _                     => Color.white,
+    };
+}
+```
+
+---
+
+### DevicesEvent
+
+Raised by `SttClient` in response to a `ListDevicesCommandEvent`. Contains the full list of audio input devices currently available on the host machine.
+
+<ParamField path="Devices" type="AudioDevice[]">
+  An array of <a href="#audiodevice">AudioDevice</a> structs, one per available input device. The array will be empty if no devices are found.
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<DevicesEvent>(OnDevices);
+void OnDisable() => EventBus.UnsubscribeFrom<DevicesEvent>(OnDevices);
+
+void OnDevices(ref DevicesEvent e)
+{
+    foreach (var device in e.Devices)
+        Debug.Log($"[{device.Index}] {device.Name} ({device.Channels}ch)");
+}
+```
+
+<Tip>
+  To populate a device selection dropdown in your UI, raise `ListDevicesCommandEvent` during `Start` or `OnEnable`, then populate the dropdown inside your `DevicesEvent` handler.
+</Tip>
+
+---
+
+### DeviceEvent
+
+Raised by `SttClient` in response to a `GetDeviceCommandEvent`. Reports which audio input device is currently selected.
+
+<ParamField path="Device" type="int?">
+  The index of the currently selected audio device, or `null` if no device has been explicitly selected (the server will use its default device).
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<DeviceEvent>(OnDevice);
+void OnDisable() => EventBus.UnsubscribeFrom<DeviceEvent>(OnDevice);
+
+void OnDevice(ref DeviceEvent e)
+{
+    if (e.Device.HasValue)
+        Debug.Log($"Active device index: {e.Device.Value}");
+    else
+        Debug.Log("No device explicitly selected (using server default).");
+}
+```
+
+---
+
+### SttConnectionChangedEvent
+
+Raised when the connection between `SttClient` and the local STT server is established or lost. Use this event to show a connection-status indicator or to disable speech-related UI when the server is unavailable.
+
+<ParamField path="Connected" type="bool">
+  `true` when the connection is successfully established; `false` when the connection drops or the server cannot be reached.
+</ParamField>
+
+<Warning>
+  If `Connected` becomes `false` mid-session, any in-progress transcription will be lost. Consider surfacing a reconnection prompt to the player rather than silently retrying in the background.
+</Warning>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<SttConnectionChangedEvent>(OnSttConnection);
+void OnDisable() => EventBus.UnsubscribeFrom<SttConnectionChangedEvent>(OnSttConnection);
+
+void OnSttConnection(ref SttConnectionChangedEvent e)
+{
+    micButton.interactable = e.Connected;
+    statusLabel.text = e.Connected ? "STT Ready" : "STT Disconnected";
+}
+```

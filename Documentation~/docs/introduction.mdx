@@ -1,0 +1,75 @@
+---
+title: "Voice Agents: Fully Local AI Voice for Unity Games"
+sidebarTitle: "Introduction"
+description: "Voice Agents is a Unity 6 package for building AI-powered voice agents that run entirely on your machine — no cloud, no latency, no API costs."
+---
+
+Voice Agents (`com.stefanwebb.voiceagents`) is a Unity 6 package that lets you add fully local, AI-powered voice interactions to your game. It connects Unity to a local speech-to-text (STT) server and a local LLM chat server over named pipes, and exposes everything as typed events on a lightweight event bus — so your gameplay code stays clean and decoupled from the transport layer.
+
+Use it to build intelligent NPCs that understand spoken player input, voice-driven game interfaces, interactive narrative characters, and more — all running on your own hardware without sending data to any cloud service.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/Documentation~/installation">
+    Add the package to your Unity project in two steps
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/Documentation~/quickstart">
+    Wire up your first voice agent scene in minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/Documentation~/concepts/architecture">
+    Understand how all the pieces fit together
+  </Card>
+  <Card title="Voice Agent Demo" icon="play" href="/Documentation~/guides/voice-agent-demo">
+    Run the included sample scene immediately
+  </Card>
+</CardGroup>
+
+## How It Works
+
+When a player speaks into the microphone, the audio is captured by a local STT server running outside Unity. That server transcribes the speech and sends the result back over a named pipe. The `SttClient` component receives the transcription and raises typed events on the `EventBus`. The `ConversationManager` listens for confirmed input and sends the full conversation history to the local LLM chat server via `ChatClient`. The LLM reply streams back token-by-token, also through the event bus, where your UI components and game logic can consume it.
+
+```
+Microphone ─► named_pipes.stt server ─┐
+                                      │  /tmp/tool-stt, /tmp/tool-chat (FIFOs)
+vLLM / any OpenAI-style LLM ◄─ named_pipes.chat server ─┘
+                                      ▲
+                                      │ ToolClient (JSON lines)
+                                      ▼
+  SttClient ──────► EventBus ◄────── ChatClient
+                      ▲   │
+      ConversationManager │  SttTranscriptionDisplay / ChatDisplay / SttStateIcon
+                      your scripts (raise commands, subscribe to events)
+```
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Fully Local" icon="server">
+    Runs entirely on your machine. No cloud API, no per-request cost, no data leaving your network.
+  </Card>
+  <Card title="Typed Event Bus" icon="bolt">
+    All server events and commands are typed C# structs. Subscribe and raise events without touching transport code.
+  </Card>
+  <Card title="Edit-Mode Preview" icon="eye">
+    `SttClient` runs in Edit Mode too — pick a microphone and check connection state before pressing Play.
+  </Card>
+  <Card title="Drop-In UI" icon="display">
+    Ready-made `SttTranscriptionDisplay`, `ChatDisplay`, and `SttStateIcon` components for immediate feedback.
+  </Card>
+  <Card title="Auto-Reconnect" icon="rotate">
+    Both `SttClient` and `ChatClient` automatically reconnect when a server restarts, using heartbeat ping/pong.
+  </Card>
+  <Card title="Conversation History" icon="comments">
+    `ConversationManager` maintains multi-turn history and injects an optional system prompt for every request.
+  </Card>
+</CardGroup>
+
+## Requirements
+
+- **Unity 6000.0** or later (requires .NET Standard 2.1 for `System.Text.Json`)
+- **macOS or Linux** — the named-pipe transport uses POSIX FIFOs (`mkfifo`)
+- **Running STT and chat servers** from the companion `named_pipes` Python package
+- **TextMeshPro Essentials** imported into your project (Window ▸ TextMeshPro ▸ Import TMP Essential Resources)
+
+<Note>
+  Text-to-speech (TTS) is not yet implemented. The package currently covers speech input and LLM chat response only.
+</Note>

@@ -1,0 +1,76 @@
+---
+title: "Voice Agents Package Changelog and Release History"
+sidebarTitle: "Changelog"
+description: "Release history for the Voice Agents Unity package, including new features, bug fixes, migration notes, and breaking changes for every version."
+---
+
+This page documents every release of the Voice Agents (`com.stefanwebb.voiceagents`) Unity package. Releases follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The most recent release is listed first. Migration notes are highlighted where a release requires action on your part.
+
+---
+
+## v0.2.4 — 2026-09-14
+
+### Improvements
+
+- **Sample scene — `PlayerController` reverts to plain `InputActionReference` fields.** The Inspector now exposes **Speech Start Action** and **Confirm Action** as direct `InputActionReference` fields. The `Actions` asset field and the action-name string fields that were added as a workaround in v0.2.2 have been removed, since the underlying GUID collision those fields worked around was properly fixed in v0.2.3.
+
+---
+
+## v0.2.3 — 2026-09-14
+
+### Bug Fixes
+
+- **Sample scene — input actions and post-processing volume profile now resolve correctly after import.** The sample previously contained files named `InputSystem_Actions.inputactions`, `SampleScene.unity`, and `SampleSceneProfile.asset`. These names and GUIDs matched the files that Unity's own project template ships, so importing the sample into a template-based project caused GUID collisions and broke all scene references. The files have been renamed to `VoiceAgentDemoActions.inputactions`, `VoiceAgentDemo.unity`, and `VoiceAgentDemoProfile.asset` with unique GUIDs, resolving the collision.
+
+<Warning>
+  **Migration required if you imported v0.2.0, v0.2.1, or v0.2.2.** Remove the old sample folder at `Assets/Samples/Voice Agents/<old version>` from your project, then re-import the sample from the Package Manager to pick up the renamed files and corrected GUIDs.
+</Warning>
+
+---
+
+## v0.2.2 — 2026-09-14
+
+### Bug Fixes
+
+- **Sample scene — `PlayerController` input actions now fire reliably with domain reload disabled.** The controller now resolves the `Player/StartSpeech` and `Player/ConfirmInput` actions by name from the `InputActionAsset` on every `OnEnable`, instead of relying on cached `InputActionReference` instances. Cached references could silently stop firing when re-entering Play mode with domain reload disabled, which is the default in Unity 6. The sample scene wires the asset reference automatically; the `InputActionReference` fields remain as a fallback.
+
+---
+
+## v0.2.1 — 2026-09-14
+
+### Bug Fixes
+
+- **`.meta` files now shipped for all root package files.** Installing the package previously generated untracked `.meta` files for `package.json`, `README.md`, `CHANGELOG.md`, and `LICENSE.md` in the consumer's project. Those `.meta` files are now included in the package.
+- **Extraneous package files removed.** A folder of supplementary markdown files was being imported by Unity as `TextAsset` objects, polluting the consumer's project. It has been removed from the package.
+
+---
+
+## v0.2.0 — 2026-09-14
+
+This release is a major rewrite. The WebRTC/Pipecat proof-of-concept is replaced by a named-pipe architecture that runs entirely on the local machine without any cloud dependency.
+
+### New Features
+
+- **`SttClient`** — streaming speech-to-text over a named pipe to a local `stt` tool server. Works in both Edit mode and Play mode. Includes a custom Inspector with an audio-device dropdown for easy device selection.
+- **`ChatClient` + `ConversationManager`** — streams LLM tokens from a local `chat` tool server. `ConversationManager` maintains conversation history and supports an optional system prompt, so you can focus on game logic rather than message array management.
+- **Typed `EventBus`** — built on `GenericEventBus`, the bus decouples every component. All server events and commands are plain structs that implement `IEvent`, making subscriptions type-safe and GC-friendly.
+- **UI helpers** — `SttTranscriptionDisplay` (live transcript), `ChatDisplay` (streaming LLM response), and `SttStateIcon` (server-state indicator) are ready to drop into any Canvas.
+- **"Voice Agent Demo" sample** — a fully wired sample scene importable directly from the Package Manager. Demonstrates end-to-end speech input, confirmation flow, and LLM response display.
+
+### Breaking Changes
+
+- **`com.unity.webrtc` dependency dropped.** Remove it from your project's `packages/manifest.json` if you were previously on v0.1.0.
+- **Pipecat `Agent/` Python server removed.** The bundled server is no longer included. Use the separate `stt` and `chat` tool servers instead.
+
+---
+
+## v0.1.0 — 2026-03-01
+
+Pre-release proof-of-concept. Not recommended for new projects — use v0.2.0 or later.
+
+### Features
+
+- Communicates with a pre-running Pipecat server from Unity via WebRTC.
+- Microphone input while in Play Mode is captured and sent to the Pipecat server.
+- Displays a transcription of the user's speech and the agent's LLM response.
+- Requires a pre-running Pipecat server and inference service.

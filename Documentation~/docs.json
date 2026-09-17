@@ -1,0 +1,69 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Voice Agents",
+  "theme": "palm",
+  "colors": {
+    "primary": "#ef7025",
+    "light": "#eec9bc",
+    "dark": "#4fa1ab"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "Documentation~/introduction",
+              "Documentation~/installation",
+              "Documentation~/quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "Documentation~/concepts/architecture",
+              "Documentation~/concepts/event-bus",
+              "Documentation~/concepts/tool-client"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "Documentation~/components/stt-client",
+              "Documentation~/components/chat-client",
+              "Documentation~/components/conversation-manager",
+              "Documentation~/components/ui-components"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "Documentation~/guides/server-setup",
+              "Documentation~/guides/scene-setup",
+              "Documentation~/guides/custom-npc",
+              "Documentation~/guides/voice-agent-demo"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "Documentation~/reference/stt-events",
+              "Documentation~/reference/chat-events",
+              "Documentation~/reference/commands",
+              "Documentation~/reference/changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/stefanwebb/unity-voice-agents"
+    }
+  }
+}

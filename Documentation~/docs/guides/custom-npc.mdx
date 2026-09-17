@@ -1,0 +1,161 @@
+---
+title: "Build a Voice-Driven NPC with Voice Agents for Unity"
+sidebarTitle: "Custom NPC"
+description: "Create an AI-powered NPC that responds to player speech using a custom system prompt, conversation history, and in-game state changes."
+---
+
+Voice Agents gives you everything you need to build a believable conversational NPC: a microphone pipeline that activates on demand, a conversation history that survives across exchanges, and state events you can hook into for animations and game logic. This guide walks you through creating an NPC with a named persona, wiring its voice interaction to a player trigger, and reacting to LLM inference state with Unity's Animator system.
+
+<Note>
+This guide assumes you have already followed the [Scene Setup](/Documentation~/guides/scene-setup) steps and have `SttClient`, `ChatClient`, and `ConversationManager` in your scene. The NPC controller described here works on top of that foundation.
+</Note>
+
+## Scenario
+
+You have a medieval blacksmith NPC named Aldric. When the player walks up and presses a key, the game pauses, the microphone activates, and the player speaks their question or command. When they stop talking, the transcription is sent to the LLM and Aldric's reply streams onto the screen. Aldric plays a "thinking" animation while the model is inferring.
+
+<Steps>
+  <Step title="Add the NPC GameObject">
+    In the Hierarchy, create a new GameObject for your NPC — for example, a mesh with a **Capsule Collider** set to **Is Trigger**. Add an **Animator** component and assign a controller that has an `IsThinking` boolean parameter. The NPC controller below will drive that parameter based on `ChatState`.
+  </Step>
+
+  <Step title="Write the NPC controller script">
+    Create a new C# script called `NpcController` and attach it to the NPC GameObject. The script subscribes to `SpeechEvent`, `SpeechEndEvent`, and `ChatDoneEvent` on the `EventBus` and exposes two public methods — `BeginConversation` and `ConfirmInput` — that you call from a player trigger or UI button.
+
+    ```csharp
+    using GenerativeGamedev;
+    using UnityEngine;
+
+    public class NpcController : MonoBehaviour
+    {
+        [SerializeField] private string _npcName = "Aldric";
+        [SerializeField, TextArea(3, 8)] private string _persona;
+
+        private ConversationManager _conversation;
+        private bool _inConversation;
+
+        void Awake() => _conversation = FindObjectOfType<ConversationManager>();
+
+        void OnEnable()
+        {
+            EventBus.SubscribeTo<SpeechEndEvent>(OnSpeechEnd);
+            EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+            EventBus.SubscribeTo<ChatDoneEvent>(OnChatDone);
+        }
+
+        void OnDisable()
+        {
+            EventBus.UnsubscribeFrom<SpeechEndEvent>(OnSpeechEnd);
+            EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+            EventBus.UnsubscribeFrom<ChatDoneEvent>(OnChatDone);
+        }
+
+        // Call this from a trigger or UI button when the player initiates conversation
+        public void BeginConversation()
+        {
+            if (_inConversation) return;
+            _inConversation = true;
+            EventBus.Raise(new StartCommandEvent());
+        }
+
+        private string _pendingText;
+
+        void OnSpeech(ref SpeechEvent e)   => _pendingText = e.Text;
+
+        void OnSpeechEnd(ref SpeechEndEvent e)
+        {
+            EventBus.Raise(new PauseCommandEvent());
+        }
+
+        // Call this when the player confirms (e.g. presses Enter)
+        public void ConfirmInput()
+        {
+            if (_pendingText != null)
+                EventBus.Raise(new ConfirmedInputEvent { Text = _pendingText });
+        }
+
+        void OnChatDone(ref ChatDoneEvent e)
+        {
+            _inConversation = false;
+            // Resume gameplay, animate NPC, etc.
+        }
+    }
+    ```
+
+    <Note>
+    `FindObjectOfType<ConversationManager>()` is convenient for small scenes but becomes expensive in scenes with many objects. In larger projects, drag the `ConversationManager` GameObject directly into an Inspector field instead.
+    </Note>
+  </Step>
+
+  <Step title="Write the NPC's persona into ConversationManager">
+    Select the `AgentManager` GameObject and find the **Conversation Manager** component. Paste a persona into the **System Prompt** text area. A good persona for Aldric might be:
+
+    ```
+    You are Aldric, a grizzled blacksmith in a medieval town. You speak in short, gruff sentences.
+    You know everything about weapons and armor. Keep responses to 2-3 sentences.
+    ```
+
+    <Tip>
+    Short, direct system prompts produce faster, more consistent replies than long elaborate ones. Instruct the LLM explicitly to keep responses to a sentence or two — local models in particular tend to ramble without this constraint.
+    </Tip>
+  </Step>
+
+  <Step title="Trigger the conversation from a player proximity check">
+    Add an `OnTriggerEnter` handler to `NpcController` (or a separate trigger script) to call `BeginConversation` when the player enters range, and wire up a key press to call `ConfirmInput`:
+
+    ```csharp
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+            BeginConversation();
+    }
+
+    void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Return))
+            ConfirmInput();
+    }
+    ```
+  </Step>
+
+  <Step title="Disable history for one-off interactions">
+    If this NPC should not remember previous conversations — for example, a sign post or a shopkeeper that resets each visit — uncheck **Accumulate History** on the `ConversationManager` component. With history off, `ConversationManager` sends only the current user turn (plus the system prompt) to the LLM on every request, keeping context small and responses predictable.
+  </Step>
+
+  <Step title="Drive NPC animations from chat state">
+    Subscribe to `ChatStateChangedEvent` to react to the LLM's inference lifecycle. The example below sets an `IsThinking` boolean on the NPC's `Animator` so you can play an idle-thinking animation while the model is generating a response:
+
+    ```csharp
+    void OnEnable()
+    {
+        EventBus.SubscribeTo<SpeechEndEvent>(OnSpeechEnd);
+        EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+        EventBus.SubscribeTo<ChatDoneEvent>(OnChatDone);
+        EventBus.SubscribeTo<ChatStateChangedEvent>(OnChatState);
+    }
+
+    void OnDisable()
+    {
+        EventBus.UnsubscribeFrom<SpeechEndEvent>(OnSpeechEnd);
+        EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+        EventBus.UnsubscribeFrom<ChatDoneEvent>(OnChatDone);
+        EventBus.UnsubscribeFrom<ChatStateChangedEvent>(OnChatState);
+    }
+
+    void OnChatState(ref ChatStateChangedEvent e)
+    {
+        bool thinking = e.State == ChatState.Inferring;
+        GetComponent<Animator>()?.SetBool("IsThinking", thinking);
+    }
+    ```
+
+    `ChatState` has three values: `Idle` (ready for input), `Inferring` (model is generating), and `Error` (connection lost mid-generation). Handle `Error` by resetting your conversation flag and returning the player to normal gameplay.
+  </Step>
+</Steps>
+
+## Tips for production NPCs
+
+- **System prompt length** — every token in the system prompt is sent with every request. Keep it under ~200 words to minimise latency on local hardware.
+- **Per-NPC history** — if you have multiple NPCs that the player can converse with, give each its own `ConversationManager` instance (or clear and repopulate the history when switching NPCs).
+- **Blocking double-sends** — the `_inConversation` guard in the example above prevents `BeginConversation` from firing while a response is still streaming. Similarly, `ConversationManager` logs `[ConversationManager] cannot send: already inferring.` and drops the event if `ConfirmedInputEvent` arrives while already processing a request.
+- **Text-to-speech** — TTS is not yet implemented in Voice Agents. For voiced NPC replies, display the streamed text and subscribe to `ChatDoneEvent` to trigger a text-to-speech call through a separate pipeline.

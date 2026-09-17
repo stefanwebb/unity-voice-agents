@@ -1,0 +1,201 @@
+---
+title: "EventBus: Decoupled Event Communication for Voice Agents"
+sidebarTitle: "Event Bus"
+description: "The EventBus is a static typed event bus that connects your scripts, UI, and voice components without any direct references between them."
+---
+
+The `EventBus` is the central communication layer in Voice Agents. Every piece of functionality — speech recognition state changes, LLM token streaming, microphone commands — flows as a typed C# struct through a single static bus rather than through direct method calls or `UnityEvent` wiring. Your gameplay scripts never import `SttClient` or `ChatClient`, and you never need to drag references between GameObjects. Instead, you raise a command event to trigger behaviour and subscribe to result events to react to it.
+
+All events are C# `struct` types implementing the `IEvent` marker interface, defined in the `GenerativeGamedev` namespace. The bus itself is a thin wrapper around the open-source `GenericEventBus<IEvent>` library, adding Unity-aware initialisation so it works correctly in both Edit Mode and Play Mode, with or without domain reload.
+
+## Namespace
+
+Add this `using` directive to any script that interacts with the bus:
+
+```csharp
+using GenerativeGamedev;
+```
+
+## Core API
+
+<CardGroup cols={2}>
+  <Card title="SubscribeTo" icon="bell">
+    Register a handler for a specific event type. Optionally pass a priority float — higher values run earlier.
+  </Card>
+  <Card title="UnsubscribeFrom" icon="bell-slash">
+    Remove a previously registered handler. Always call this in `OnDisable`.
+  </Card>
+  <Card title="Raise" icon="bolt">
+    Raise an event. If another event is currently being dispatched, this event is queued and raised immediately after.
+  </Card>
+  <Card title="RaiseImmediately" icon="bolt-lightning">
+    Raise an event right now, regardless of whether another event is in flight. Use with care.
+  </Card>
+</CardGroup>
+
+The full API surface:
+
+| Method | Description |
+|---|---|
+| `EventBus.SubscribeTo<TEvent>(handler, priority)` | Subscribe; optional `float` priority (higher = earlier). Same priority = subscription order. |
+| `EventBus.UnsubscribeFrom<TEvent>(handler)` | Remove a subscription. Always call in `OnDisable`. |
+| `EventBus.Raise<TEvent>(in TEvent event)` | Raise an event; queued if another is already being raised. |
+| `EventBus.RaiseImmediately<TEvent>(TEvent event)` | Raise immediately, bypassing the queue. |
+| `EventBus.RaiseImmediately<TEvent>(ref TEvent event)` | Raise immediately by reference, bypassing the queue. Lets handlers mutate the event struct. |
+| `EventBus.ConsumeCurrentEvent()` | Stop the current event from reaching lower-priority subscribers. |
+| `EventBus.IsEventBeingRaised` | `true` while an event is being dispatched to handlers. |
+| `EventBus.CurrentEventIsConsumed` | `true` if the current event has been consumed by a handler. |
+| `EventBus.ClearListeners<TEvent>()` | Remove all subscribers for one event type. Throws if called while an event is being raised. |
+
+## Subscribing and unsubscribing
+
+The recommended pattern is to subscribe in `OnEnable` and unsubscribe in `OnDisable`. This ensures your handler is active exactly when the GameObject is active, and that it is cleaned up before the scene unloads or the component is destroyed.
+
+```csharp
+using GenerativeGamedev;
+using UnityEngine;
+
+public class MyScript : MonoBehaviour
+{
+    void OnEnable()
+    {
+        EventBus.SubscribeTo<ChatTokenEvent>(OnToken);
+        EventBus.SubscribeTo<ChatDoneEvent>(OnDone);
+    }
+
+    void OnDisable()
+    {
+        EventBus.UnsubscribeFrom<ChatTokenEvent>(OnToken);
+        EventBus.UnsubscribeFrom<ChatDoneEvent>(OnDone);
+    }
+
+    void OnToken(ref ChatTokenEvent e)
+    {
+        Debug.Log(e.Text);
+    }
+
+    void OnDone(ref ChatDoneEvent e)
+    {
+        Debug.Log("Reply complete.");
+    }
+}
+```
+
+Notice that handlers receive the event by `ref`. This is required by the `GenericEventBus.EventHandler<TEvent>` delegate signature — you can modify fields of the event struct inside the handler if needed.
+
+<Warning>
+**Always call `UnsubscribeFrom` in `OnDisable`.** If you forget, the bus holds a reference to the handler delegate, which in turn holds a reference to the `MonoBehaviour` instance. After the GameObject is destroyed or the scene unloads, the bus will attempt to invoke a dangling delegate, causing `MissingReferenceException` errors that are difficult to trace. No exceptions are thrown at subscription time to remind you — discipline here is your responsibility.
+</Warning>
+
+## Raising commands
+
+You trigger behaviour in `SttClient`, `ChatClient`, and `ConversationManager` by raising the appropriate command event. Your script does not need a reference to any of those components.
+
+```csharp
+// Begin speech recognition
+EventBus.Raise(new StartCommandEvent());
+
+// Pause speech recognition
+EventBus.Raise(new PauseCommandEvent());
+
+// Confirm the transcription and send it to the LLM
+EventBus.Raise(new ConfirmedInputEvent { Text = "Tell me about this dungeon." });
+```
+
+For STT device management:
+
+```csharp
+// Request the list of available microphones
+EventBus.Raise(new ListDevicesCommandEvent());
+
+// Select a microphone by name
+EventBus.Raise(new SetDeviceCommandEvent { Device = "Built-in Microphone" });
+```
+
+## Subscription priority
+
+Every call to `SubscribeTo` accepts an optional `float priority` as the second argument. Handlers with a **higher** priority value are invoked **before** handlers with lower values. When two handlers share the same priority, they are called in the order they subscribed.
+
+```csharp
+// This handler runs before the default-priority one
+EventBus.SubscribeTo<SpeechEvent>(OnSpeechHighPriority, priority: 10f);
+
+// Default priority is 0
+EventBus.SubscribeTo<SpeechEvent>(OnSpeechDefault);
+```
+
+<Tip>
+Use priority ordering to implement an interceptor pattern: a high-priority handler can inspect an event and call `EventBus.ConsumeCurrentEvent()` to prevent lower-priority handlers from seeing it. This is useful for muting transcription display while a cutscene is playing, for example.
+</Tip>
+
+## Event consumption and propagation
+
+Calling `EventBus.ConsumeCurrentEvent()` inside a handler marks the current event as consumed. The bus stops calling remaining subscribers for that event dispatch. You can check `EventBus.CurrentEventIsConsumed` from within any handler if you want to inspect whether a higher-priority sibling has already consumed the event.
+
+```csharp
+void OnSpeech(ref SpeechEvent e)
+{
+    if (GameIsPaused)
+    {
+        // Swallow the event — no other handler will see it
+        EventBus.ConsumeCurrentEvent();
+        return;
+    }
+    transcriptText.text = e.Text;
+}
+```
+
+## Re-entrancy and queuing
+
+`EventBus.Raise` is safe to call from within an event handler. If an event is already being dispatched when you call `Raise`, the new event is placed in a queue and dispatched immediately after the current one finishes. The queue drains fully before control returns to the code that raised the first event.
+
+`EventBus.RaiseImmediately` bypasses the queue entirely and starts a new nested dispatch right now. This is occasionally useful but can lead to difficult-to-follow execution order. Prefer `Raise` in almost all cases.
+
+```csharp
+void OnConfirmedInput(ref ConfirmedInputEvent e)
+{
+    // Safe: queued if we are already inside a Raise dispatch
+    EventBus.Raise(new ChatCommandEvent { Messages = BuildHistory(e.Text) });
+}
+```
+
+## Complete event reference
+
+### STT events (raised by `SttClient`)
+
+| Event | Fields | When |
+|---|---|---|
+| `SttConnectionChangedEvent` | `bool Connected` | Server connected or disconnected |
+| `StateChangedEvent` | `SttState State` | Recognizer state transitions |
+| `SpeechStartEvent` | — | Voice activity detected |
+| `SpeechEndEvent` | — | Voice activity stopped |
+| `TokenEvent` | `string Text` | Partial transcription token |
+| `SpeechEvent` | `string Text`, `AlignedWord[] Words` | Final transcription with word timestamps |
+| `DevicesEvent` | `AudioDevice[] Devices` | Response to `ListDevicesCommandEvent` |
+| `DeviceEvent` | `int? Device` | Response to `GetDeviceCommandEvent` |
+
+### Chat events (raised by `ChatClient`)
+
+| Event | Fields | When |
+|---|---|---|
+| `ChatConnectionChangedEvent` | `bool Connected` | Server connected or disconnected |
+| `ChatStateChangedEvent` | `ChatState State` | State transitions (`Idle`, `Inferring`, `Error`) |
+| `ChatTokenEvent` | `string Text` | One streamed token from the LLM |
+| `ChatDoneEvent` | — | LLM has finished generating the reply |
+
+### STT commands (subscribed by `SttClient`)
+
+| Command | Fields | Effect |
+|---|---|---|
+| `StartCommandEvent` | — | Begin listening / transcribing |
+| `PauseCommandEvent` | — | Stop listening |
+| `ListDevicesCommandEvent` | — | Request microphone list |
+| `GetDeviceCommandEvent` | — | Request current microphone |
+| `SetDeviceCommandEvent` | `string Device` | Select microphone by name |
+
+### Chat commands (subscribed by `ChatClient` and `ConversationManager`)
+
+| Command | Fields | Effect |
+|---|---|---|
+| `ConfirmedInputEvent` | `string Text` | User has confirmed their transcription; `ConversationManager` converts this into a `ChatCommandEvent` |
+| `ChatCommandEvent` | `ChatMessage[] Messages` | Send a full message array to the LLM |

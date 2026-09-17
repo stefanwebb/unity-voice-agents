@@ -1,0 +1,102 @@
+---
+title: "ConversationManager: Managing Chat History"
+sidebarTitle: "Conversation Manager"
+description: "ConversationManager maintains multi-turn conversation history and bridges confirmed STT input to the LLM chat server automatically."
+---
+
+`ConversationManager` is the glue between speech recognition and the language model. It listens for `ConfirmedInputEvent` — the signal that the player's transcribed text is ready to be acted on — then appends the user turn to an in-memory history list, optionally prepends a system prompt, and fires `ChatCommandEvent` with the full message array. As the LLM streams its reply, `ConversationManager` accumulates the tokens; when `ChatDoneEvent` arrives, the complete assistant reply is committed back to history. This means every subsequent turn automatically carries the full conversation context with no extra code in your game logic.
+
+<Note>
+Conversation history is held entirely in memory. It is cleared when `ConversationManager` is disabled or the scene is unloaded. If you need persistent conversations across sessions, write a companion component that captures each turn from `ConfirmedInputEvent` and `ChatDoneEvent` and saves them to a file or player prefs.
+</Note>
+
+## Add to Your Scene
+
+Place `ConversationManager` on the same GameObject as `SttClient` and `ChatClient`. Only one active instance is allowed; a second will disable itself immediately and log an error.
+
+## Inspector Properties
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| **System Prompt** | string (TextArea) | `""` | An optional persona or instruction block prepended to every request sent to the LLM. Supports multi-line text. Leave blank to omit. |
+| **Accumulate History** | bool | `true` | When enabled, the full conversation history (all prior turns) is sent with each request. When disabled, only the most recent user turn is sent — useful for stateless, single-question interactions. |
+
+<Tip>
+Use the **System Prompt** field to define an NPC's personality, knowledge, and constraints. For example: `"You are Aldric, a gruff blacksmith in a medieval village. Speak in short, direct sentences and refuse to discuss anything outside your craft."` The system prompt is injected at position zero of every message array, so the LLM always has the persona in context.
+</Tip>
+
+## How It Works
+
+<Steps>
+  <Step title="Raise ConfirmedInputEvent">
+    Your input script raises `ConfirmedInputEvent { Text = "player said this" }` after speech has been transcribed and confirmed (for example, when the player presses a confirmation key or `SttClient` delivers a final `SpeechEvent`).
+  </Step>
+  <Step title="User turn appended to history">
+    `ConversationManager` adds `{ Role = "user", Content = text }` to the in-memory history list.
+  </Step>
+  <Step title="Message array assembled">
+    If **Accumulate History** is `true`, the full history is used. If `false`, only the most recent user turn is included. If a system prompt is configured, it is inserted at index 0 as `{ Role = "system", Content = systemPrompt }`.
+  </Step>
+  <Step title="ChatCommandEvent raised">
+    `ConversationManager` raises `ChatCommandEvent { Messages = ... }`. `ChatClient` picks this up and sends it to the LLM server.
+  </Step>
+  <Step title="Tokens stream in">
+    As `ChatTokenEvent` events arrive from `ChatClient`, `ConversationManager` accumulates each token into a reply buffer.
+  </Step>
+  <Step title="Assistant turn committed">
+    On `ChatDoneEvent`, the buffer is flushed and `{ Role = "assistant", Content = fullReply }` is added to history, completing the turn.
+  </Step>
+</Steps>
+
+If `ChatStateChangedEvent { State = ChatState.Error }` is received, the reply buffer is discarded and the assistant turn is not committed — the history stays clean.
+
+## Disabling History Accumulation
+
+Set **Accumulate History** to `false` for interactions where context does not carry over: asking an in-world sign a question, querying a static knowledge base, or any situation where each exchange should be treated independently. When disabled, only the single most-recent user message is forwarded to the LLM.
+
+## Typical Usage
+
+After your STT pipeline produces a final transcription, call into `ConversationManager` by raising `ConfirmedInputEvent` from any script:
+
+```csharp
+using GenerativeGamedev;
+using UnityEngine;
+
+public class PlayerInput : MonoBehaviour
+{
+    // After speech is confirmed (e.g. player pressed Enter)
+    public void OnConfirm(string transcribedText)
+    {
+        EventBus.Raise(new ConfirmedInputEvent { Text = transcribedText });
+    }
+}
+```
+
+You can also wire confirmation directly to `SpeechEvent` if you want the full transcription to trigger a response automatically without a manual confirm step:
+
+```csharp
+using GenerativeGamedev;
+using UnityEngine;
+
+public class AutoConfirm : MonoBehaviour
+{
+    void OnEnable()  => EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+    void OnDisable() => EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+
+    void OnSpeech(ref SpeechEvent e)
+    {
+        if (!string.IsNullOrWhiteSpace(e.Text))
+            EventBus.Raise(new ConfirmedInputEvent { Text = e.Text });
+    }
+}
+```
+
+## Re-entrant Guard
+
+If `ConfirmedInputEvent` arrives while a generation is already in progress (`ChatState.Inferring`), `ConversationManager` drops the event and logs a warning:
+
+```
+[ConversationManager] cannot send: already inferring.
+```
+
+Always wait for `ChatDoneEvent` before triggering the next user input.

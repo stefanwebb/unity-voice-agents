@@ -1,0 +1,151 @@
+---
+title: "Chat Events Reference for Voice Agents Unity Package"
+sidebarTitle: "Chat Events"
+description: "Complete reference for all LLM chat events raised on the EventBus by ChatClient, including token streaming, completion, and state changes."
+---
+
+`ChatClient` translates every message from the local LLM chat server into a typed event struct and raises it on the shared `EventBus`. Token streaming, completion signals, state transitions, and connection changes all arrive as discrete events so any component can react without coupling directly to `ChatClient`. The sections below document every event type, its fields, and a subscription example.
+
+## Supporting Types
+
+### ChatState Enum
+
+Represents the current operating state of the chat server. `ChatStateChangedEvent` carries one of these values on every transition.
+
+| Value | Meaning |
+|---|---|
+| `Idle` | The server is connected and waiting for input. |
+| `Inferring` | The server is currently running inference and streaming tokens. |
+| `Error` | The server has encountered an error. |
+
+### ChatMessage
+
+A single message in a conversation history. Used as the element type of the `Messages` array in `ChatCommandEvent`.
+
+<ParamField path="Role" type="string">
+  The speaker role. Must be one of `"system"`, `"user"`, or `"assistant"`.
+</ParamField>
+
+<ParamField path="Content" type="string">
+  The text content of the message.
+</ParamField>
+
+---
+
+## Event Summary
+
+| Event | Key Fields | When Raised |
+|---|---|---|
+| `ChatTokenEvent` | `Text` | Each streaming token arrives from the LLM |
+| `ChatDoneEvent` | — | LLM has finished its full response |
+| `ChatStateChangedEvent` | `State` | Chat server transitions between states |
+| `ChatConnectionChangedEvent` | `Connected` | Connection to the chat server changes |
+
+---
+
+## Events
+
+### ChatTokenEvent
+
+Raised for every token the LLM streams back during inference. Subscribe to this event to display the agent's response as it is generated, character by character.
+
+<ParamField path="Text" type="string">
+  A single token from the streaming LLM response. Tokens arrive in order and should be appended to build up the full response text.
+</ParamField>
+
+<Note>
+  `ChatTokenEvent` carries partial, in-progress text. To know when the full response is complete, also subscribe to `ChatDoneEvent`.
+</Note>
+
+```csharp
+using GenerativeGamedev;
+
+private string _agentResponse = "";
+
+void OnEnable() => EventBus.SubscribeTo<ChatTokenEvent>(OnChatToken);
+void OnDisable() => EventBus.UnsubscribeFrom<ChatTokenEvent>(OnChatToken);
+
+void OnChatToken(ref ChatTokenEvent e)
+{
+    _agentResponse += e.Text;
+    responseLabel.text = _agentResponse;
+}
+```
+
+---
+
+### ChatDoneEvent
+
+Raised when the LLM has finished streaming its full response. No fields are carried — its presence is the signal. Use this event to finalise any UI state, re-enable input, or trigger follow-up logic.
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<ChatDoneEvent>(OnChatDone);
+void OnDisable() => EventBus.UnsubscribeFrom<ChatDoneEvent>(OnChatDone);
+
+void OnChatDone(ref ChatDoneEvent e)
+{
+    Debug.Log("LLM response complete.");
+    confirmButton.interactable = true;
+}
+```
+
+<Tip>
+  Combine `ChatTokenEvent` and `ChatDoneEvent`: accumulate tokens in a string field, then commit or post-process the full response only when `ChatDoneEvent` fires.
+</Tip>
+
+---
+
+### ChatStateChangedEvent
+
+Raised whenever the chat server transitions between lifecycle states. Use this event to drive a thinking indicator, disable the send button during inference, or surface error states to the player.
+
+<ParamField path="State" type="ChatState">
+  The new state the chat server has entered. See the <a href="#chatstate-enum">ChatState enum</a> above for values and their meanings.
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<ChatStateChangedEvent>(OnChatState);
+void OnDisable() => EventBus.UnsubscribeFrom<ChatStateChangedEvent>(OnChatState);
+
+void OnChatState(ref ChatStateChangedEvent e)
+{
+    Debug.Log($"Chat state → {e.State}");
+
+    thinkingSpinner.SetActive(e.State == ChatState.Inferring);
+    sendButton.interactable = e.State == ChatState.Idle;
+
+    if (e.State == ChatState.Error)
+        errorPanel.SetActive(true);
+}
+```
+
+---
+
+### ChatConnectionChangedEvent
+
+Raised when the connection between `ChatClient` and the local LLM chat server is established or lost. Use this event to gate chat-related UI on server availability.
+
+<ParamField path="Connected" type="bool">
+  `true` when the connection to the chat server is successfully established; `false` when it drops or cannot be reached.
+</ParamField>
+
+<Warning>
+  If `Connected` becomes `false` while a response is streaming, any in-flight tokens will be lost. Surface a reconnection notice to the player rather than silently resuming.
+</Warning>
+
+```csharp
+using GenerativeGamedev;
+
+void OnEnable() => EventBus.SubscribeTo<ChatConnectionChangedEvent>(OnChatConnection);
+void OnDisable() => EventBus.UnsubscribeFrom<ChatConnectionChangedEvent>(OnChatConnection);
+
+void OnChatConnection(ref ChatConnectionChangedEvent e)
+{
+    sendButton.interactable = e.Connected;
+    connectionLabel.text = e.Connected ? "Chat Ready" : "Chat Disconnected";
+}
+```

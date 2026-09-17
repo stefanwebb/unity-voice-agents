@@ -1,0 +1,130 @@
+---
+title: "UI Helper Components for Voice Agents"
+sidebarTitle: "UI Components"
+description: "SttTranscriptionDisplay, ChatDisplay, and SttStateIcon are drop-in TextMeshPro and uGUI components for showing speech and LLM state in your game UI."
+---
+
+The Voice Agents package ships three lightweight UI helper components that wire your game's interface to the `EventBus` with no boilerplate. Each one requires a matching uGUI component on the same `GameObject` (enforced by `[RequireComponent]`) and subscribes to the relevant events in `OnEnable` / `OnDisable`. You do not need to reference `SttClient` or `ChatClient` directly — the helpers are pure event consumers and work wherever the `EventBus` is available.
+
+## Quick Setup Reference
+
+| Component | Required Component | Events Consumed |
+|---|---|---|
+| `SttTranscriptionDisplay` | `TextMeshProUGUI` | `SpeechStartEvent`, `SpeechEvent` |
+| `ChatDisplay` | `TextMeshProUGUI` | `ChatCommandEvent`, `ChatTokenEvent` |
+| `SttStateIcon` | `RawImage` | `SttConnectionChangedEvent`, `StateChangedEvent`, `SpeechStartEvent`, `SpeechEndEvent`, `ChatStateChangedEvent` |
+
+---
+
+## SttTranscriptionDisplay
+
+`SttTranscriptionDisplay` shows the live transcription produced by the STT server in a `TextMeshProUGUI` text field. Attach it directly to the `GameObject` that holds the `TextMeshProUGUI` component — it calls `GetComponent<TextMeshProUGUI>()` in `Awake`, so the two components must be on the same object.
+
+**Behaviour:**
+- On `SpeechStartEvent` — clears the text field (sets it to a single space) to signal that a new utterance has begun.
+- On `SpeechEvent` — displays the final trimmed transcription text.
+
+No configuration is needed. The component is a pure Play Mode consumer; it has no connection-state awareness and does not react to `TokenEvent` (streaming partials) — only to the final confirmed `SpeechEvent`.
+
+**Setup steps:**
+
+<Steps>
+  <Step title="Create the UI hierarchy">
+    In your scene, create a **Canvas → Panel → Text (TMP)** hierarchy.
+  </Step>
+  <Step title="Attach the component">
+    Select the **Text (TMP)** GameObject and click **Add Component → SttTranscriptionDisplay**.
+  </Step>
+  <Step title="Enter Play Mode">
+    Press Play and speak into your microphone. The field clears at the start of each utterance and fills with the transcription when the server finalises the result.
+  </Step>
+</Steps>
+
+---
+
+## ChatDisplay
+
+`ChatDisplay` renders the streaming LLM reply in real time. Attach it to the `GameObject` holding your `TextMeshProUGUI` component — just like `SttTranscriptionDisplay`.
+
+**Behaviour:**
+- On `ChatCommandEvent` — clears the text field, ready for the next response.
+- On `ChatTokenEvent` — appends the token's text directly to the field, producing a typewriter streaming effect as tokens arrive.
+
+No configuration is needed. The field updates synchronously on the main thread because `ChatClient` enqueues all EventBus raises to the Unity update loop.
+
+**Usage example:**
+
+<Steps>
+  <Step title="Create the UI hierarchy">
+    Add a **Canvas → Panel → Text (TMP)** object for the AI reply area.
+  </Step>
+  <Step title="Attach the component">
+    Select the **Text (TMP)** GameObject and click **Add Component → ChatDisplay**.
+  </Step>
+  <Step title="Speak or send a message">
+    When `ConversationManager` raises `ChatCommandEvent`, the field clears. Tokens stream in and appear character-by-character until `ChatDoneEvent`.
+  </Step>
+</Steps>
+
+---
+
+## SttStateIcon
+
+`SttStateIcon` swaps a `RawImage` texture to reflect the combined state of the STT server and the LLM. It gives players a clear visual cue for every phase of the voice agent pipeline: disconnected, loading, listening, transcribing, waiting for a reply, and more. Attach it to the `GameObject` holding the `RawImage` component.
+
+### Inspector Fields
+
+Assign a texture for each state. PNG and SVG textures both work; the component automatically resizes the `RawImage`'s `RectTransform` to match each texture's native dimensions.
+
+| Field | When Shown |
+|---|---|
+| **Listening Icon** | STT server is in the `Listening` state (microphone is active). |
+| **Disconnected Icon** | Not connected to the STT server, or connection was lost. |
+| **Speaking Icon** | STT server is in the `Transcribing` state (speech was detected and is being processed). |
+| **Not Ready Icon** | STT server is `Loading` or `Ready` but not yet listening. |
+| **Speech Ended Icon** | Speech was detected and has ended (`SpeechEndEvent` received), awaiting the final transcription. |
+| **Error Icon** | STT server is in the `Error` state. |
+| **Thinking Icon** | The LLM is generating a response (`ChatState.Inferring`). |
+
+### CanvasGroup Reference
+
+`SttStateIcon` requires a `CanvasGroup` reference (assign the parent panel in the Inspector). The icon container is hidden (`alpha = 0`, `blocksRaycasts = false`) when **all** of the following are true:
+
+- The STT server **is** connected
+- The STT server state **is** `Paused`
+- The chat server state **is not** `Inferring`
+
+This corresponds to the "normal play" state where the player is not interacting with the voice agent and no UI distraction is needed. As soon as the player starts speaking, the server transitions out of `Paused` and the icon reappears.
+
+### Event Reactions
+
+| Event | Effect |
+|---|---|
+| `SttConnectionChangedEvent` | Updates the tracked connection state; re-evaluates visibility and icon. |
+| `StateChangedEvent` | Updates the current `SttState`; resets the speech-ended indicator; re-evaluates icon. |
+| `SpeechStartEvent` | Resets the speech-ended indicator; re-evaluates icon (shows Listening icon). |
+| `SpeechEndEvent` | Sets the speech-ended indicator; shows the Speech Ended icon. |
+| `ChatStateChangedEvent` | Updates the current `ChatState`; if `Inferring`, shows Thinking icon with highest priority. |
+
+### Setup Steps
+
+<Steps>
+  <Step title="Create the UI hierarchy">
+    Add a **Canvas → Panel → Raw Image** hierarchy for the status icon area. Add a `CanvasGroup` component to the **Panel**.
+  </Step>
+  <Step title="Attach the component">
+    Select the **Raw Image** GameObject and click **Add Component → SttStateIcon**.
+  </Step>
+  <Step title="Assign the CanvasGroup">
+    Drag the **Panel** (with the `CanvasGroup` component) into the **Container** field on `SttStateIcon`.
+  </Step>
+  <Step title="Assign textures">
+    Import your icon textures and drag them into the corresponding slots: **Listening Icon**, **Disconnected Icon**, **Speaking Icon**, **Not Ready Icon**, **Speech Ended Icon**, **Error Icon**, and **Thinking Icon**.
+  </Step>
+</Steps>
+
+---
+
+<Tip>
+The **Voice Agent Demo** sample included with the package shows all three components wired up in a complete scene. Import it via **Package Manager → Voice Agents → Samples → Voice Agent Demo** to see a working reference layout with textures and Canvas hierarchy already configured.
+</Tip>

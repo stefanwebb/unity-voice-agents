@@ -1,0 +1,114 @@
+---
+title: "SttClient: Speech-to-Text in Unity"
+sidebarTitle: "SttClient"
+description: "SttClient is a MonoBehaviour that connects to your local STT server, manages audio devices, and raises typed speech events on the EventBus."
+---
+
+`SttClient` is the bridge between your Unity scene and the local speech-to-text server. It runs on a background thread, maintains a persistent connection to the `stt` tool server, and surfaces every server event — transcription tokens, final speech results, device lists, and state changes — as strongly typed structs on the `EventBus`. Any script in your scene can send commands to the microphone by raising the corresponding command events; `SttClient` intercepts them and forwards them to the server without your code needing to know anything about the underlying transport.
+
+<Note>
+`SttClient` is decorated with `[ExecuteAlways]`, so it connects to the STT server as soon as the component is enabled — even in Edit Mode, before you press Play. This lets you inspect the device list, confirm the connection state, and switch microphones directly from the Inspector without running your game.
+</Note>
+
+## Add to Your Scene
+
+Place `SttClient` on any GameObject in your scene. The component registers itself as the single active instance on `OnEnable` and cleans up on `OnDisable`, so the lifetime follows normal Unity component rules.
+
+<Warning>
+Only **one** `SttClient` can be active at a time. If a second instance is enabled, it immediately disables itself and logs an error: `[SttClient] another SttClient ('...') is already active; disabling this one to avoid two connections corrupting the same named pipe.` Keep a single `SttClient` in your scene hierarchy.
+</Warning>
+
+## Inspector Properties
+
+Configure `SttClient` from the Inspector without writing any code.
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| **Tool Name** | string | `"stt"` | The name of the tool server to connect to. Must match the server's registered name. |
+| **Reconnect Interval Seconds** | float | `3` | How long (in seconds) to wait before attempting a reconnect after losing the connection. |
+| **Ping Interval Seconds** | float | `5` | How frequently (in seconds) to send a heartbeat ping to the server. |
+| **Pong Timeout Seconds** | float | `10` | If no pong is received within this window after a ping, the connection is considered dead and a reconnect is triggered. |
+| **Is Connected Debug** | bool | — | Read-only. Mirrors the current connection state so you can see it at a glance in the Inspector. |
+
+## Runtime Properties
+
+After the component connects and the server responds, two properties are available on the `SttClient` instance:
+
+| Property | Type | Description |
+|---|---|---|
+| `Devices` | `AudioDevice[]` | All available audio input devices. Populated after the server responds to a `ListDevicesCommandEvent`. Each `AudioDevice` has `Index`, `Name`, and `Channels` fields. |
+| `SelectedDevice` | `int?` | The index of the currently selected audio input device, or `null` if none has been reported yet. |
+
+## Events Raised on the EventBus
+
+`SttClient` raises the following events. Subscribe to them from any `MonoBehaviour` using `EventBus.SubscribeTo<T>`.
+
+| Event | Fields | Description |
+|---|---|---|
+| `SpeechStartEvent` | — | The microphone has detected the beginning of speech. |
+| `SpeechEndEvent` | — | Speech has ended; the server detected silence after an utterance. |
+| `TokenEvent` | `string Text` | A partial transcription token from the streaming STT pipeline. |
+| `SpeechEvent` | `string Text`, `AlignedWord[] Words` | The final transcription for a completed utterance. `Words` contains per-word timestamps (`Word`, `Start`, `End` in seconds) and may be `null` if the model does not produce alignment data. |
+| `StateChangedEvent` | `SttState State` | The STT server has changed state. Possible values: `Ready`, `Loading`, `Listening`, `Transcribing`, `Paused`, `Error`. |
+| `DevicesEvent` | `AudioDevice[] Devices` | The full list of available audio input devices, returned in response to `ListDevicesCommandEvent`. |
+| `DeviceEvent` | `int? Device` | The index of the currently selected device, returned in response to `GetDeviceCommandEvent`. |
+| `SttConnectionChangedEvent` | `bool Connected` | Fired whenever the connection to the STT server is established or lost. |
+
+## Commands Forwarded to the Server
+
+Raise any of the following events on the `EventBus` from your own scripts. `SttClient` intercepts them and sends the corresponding command to the server.
+
+| Command Event | Fields | Description |
+|---|---|---|
+| `StartCommandEvent` | — | Tell the STT server to begin listening for speech. |
+| `PauseCommandEvent` | — | Pause listening. The microphone goes quiet until `StartCommandEvent` is raised again. |
+| `ListDevicesCommandEvent` | — | Request the list of available audio input devices. The server responds with `DevicesEvent`. |
+| `GetDeviceCommandEvent` | — | Request the currently selected device. The server responds with `DeviceEvent`. |
+| `SetDeviceCommandEvent` | `string Device` | Switch to a specific audio input device by name. |
+
+## Edit Mode Behaviour
+
+Because `SttClient` uses `[ExecuteAlways]`, it connects to the `stt` tool server immediately when the component is enabled in the Editor. The **Is Connected Debug** checkbox in the Inspector updates live, and once connected the `Devices` array is populated automatically (via an automatic `list_devices` + `get_device` call on connect). You can inspect the current device and connection state without entering Play Mode.
+
+When you exit Play Mode, if the server is currently in the `Listening` or `Transcribing` state, `SttClient` automatically sends a `pause` command so the microphone does not keep recording after play ends.
+
+## Code Example
+
+```csharp
+using GenerativeGamedev;
+using UnityEngine;
+
+public class SpeechController : MonoBehaviour
+{
+    void OnEnable()
+    {
+        EventBus.SubscribeTo<SttConnectionChangedEvent>(OnConnection);
+        EventBus.SubscribeTo<StateChangedEvent>(OnState);
+        EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+    }
+
+    void OnDisable()
+    {
+        EventBus.UnsubscribeFrom<SttConnectionChangedEvent>(OnConnection);
+        EventBus.UnsubscribeFrom<StateChangedEvent>(OnState);
+        EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+    }
+
+    void OnConnection(ref SttConnectionChangedEvent e) =>
+        Debug.Log(e.Connected ? "STT connected" : "STT disconnected");
+
+    void OnState(ref StateChangedEvent e) =>
+        Debug.Log($"STT state: {e.State}");
+
+    void OnSpeech(ref SpeechEvent e)
+    {
+        Debug.Log($"Transcription: {e.Text}");
+        // e.Words contains AlignedWord[] with Start/End timestamps
+        foreach (var word in e.Words ?? System.Array.Empty<AlignedWord>())
+            Debug.Log($"  {word.Word} ({word.Start:F2}s – {word.End:F2}s)");
+    }
+
+    public void StartListening() => EventBus.Raise(new StartCommandEvent());
+    public void StopListening()  => EventBus.Raise(new PauseCommandEvent());
+}
+```

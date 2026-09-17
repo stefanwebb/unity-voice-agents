@@ -1,0 +1,62 @@
+---
+title: "Voice Agents Documentation"
+sidebarTitle: "Home"
+description: "Voice Agents is a Unity package for building fully-local AI voice agents. Connect speech-to-text and LLM chat to your game with a typed event bus."
+---
+
+Voice Agents (`com.stefanwebb.voiceagents`) brings fully local, AI-powered voice interactions to Unity 6. Connect a local speech-to-text server and a local LLM to your game through a clean typed event bus — no cloud dependency, no API costs, and no data leaving your machine.
+
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book-open" href="/Documentation~/introduction">
+    Learn what Voice Agents is and how it works
+  </Card>
+  <Card title="Installation" icon="download" href="/Documentation~/installation">
+    Add the package to your Unity project
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/Documentation~/quickstart">
+    Wire up your first voice agent scene
+  </Card>
+  <Card title="Voice Agent Demo" icon="play" href="/Documentation~/guides/voice-agent-demo">
+    Run the included sample scene
+  </Card>
+</CardGroup>
+
+## Getting Started
+
+<Steps>
+  <Step title="Install the package">
+    Open **Window ▸ Package Manager**, click **+ ▸ Add package from git URL**, and enter `https://github.com/stefanwebb/unity-voice-agents.git`.
+  </Step>
+  <Step title="Start the local servers">
+    Run the `stt` and `chat` tool servers from the `named_pipes` Python package so `/tmp/tool-stt` and `/tmp/tool-chat` exist.
+  </Step>
+  <Step title="Add components to your scene">
+    Add `SttClient`, `ChatClient`, and `ConversationManager` to a GameObject, then add the UI helper components for live feedback.
+  </Step>
+  <Step title="Raise and subscribe to events">
+    Use `EventBus.Raise()` and `EventBus.SubscribeTo()` from any script to start listening and respond to speech and LLM tokens.
+  </Step>
+</Steps>
+
+## Explore the Docs
+
+<CardGroup cols={3}>
+  <Card title="Architecture" icon="diagram-project" href="/Documentation~/concepts/architecture">
+    See how all components connect
+  </Card>
+  <Card title="Event Bus" icon="bolt" href="/Documentation~/concepts/event-bus">
+    Understand the typed event system
+  </Card>
+  <Card title="SttClient" icon="microphone" href="/Documentation~/components/stt-client">
+    Configure speech-to-text
+  </Card>
+  <Card title="ChatClient" icon="robot" href="/Documentation~/components/chat-client">
+    Stream LLM responses
+  </Card>
+  <Card title="STT Events" icon="list" href="/Documentation~/reference/stt-events">
+    Full STT event reference
+  </Card>
+  <Card title="Commands" icon="terminal" href="/Documentation~/reference/commands">
+    All available command events
+  </Card>
+</CardGroup>

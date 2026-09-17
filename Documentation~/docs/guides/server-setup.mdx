@@ -1,0 +1,70 @@
+---
+title: "Set Up Local STT and Chat Servers for Voice Agents"
+sidebarTitle: "Server Setup"
+description: "Install and run the named_pipes Python package to start the local speech-to-text and LLM chat servers that Voice Agents connects to via named pipes."
+---
+
+Voice Agents does not bundle its own speech recognition or language model — instead it connects to two lightweight servers that you run on the same machine. Both servers are provided by the `named_pipes` Python package and communicate with Unity over POSIX named pipes (FIFOs) at `/tmp/tool-stt` and `/tmp/tool-chat`. Once those two pipes exist and the servers are healthy, `SttClient` and `ChatClient` connect automatically and begin routing events onto the `EventBus`.
+
+<Warning>
+Voice Agents uses POSIX named pipes (`mkfifo`) via `libc`. The package runs on **macOS and Linux only**. Windows is not supported.
+</Warning>
+
+<Note>
+The `named_pipes` Python package — including full installation instructions, configuration options, and model recommendations — is maintained separately from this Unity package. Refer to its own README for authoritative setup steps. This guide covers only what you need to know from Unity's perspective.
+</Note>
+
+## Prerequisites
+
+Before starting either server, make sure you have:
+
+- **Python 3.9 or later** available on your `PATH`
+- A working **microphone** recognised by your OS
+- A **local LLM endpoint** reachable by the chat server — any OpenAI-compatible API works, including [vLLM](https://github.com/vllm-project/vllm), [llama.cpp](https://github.com/ggerganov/llama.cpp) with `--server`, and [Ollama](https://ollama.com/) with its OpenAI-compatibility layer
+
+## What each server does
+
+**STT server (`/tmp/tool-stt`)** — captures audio from your microphone, runs a local speech-recognition model (such as Whisper), and streams transcription events over the FIFO. `SttClient` receives those events and raises them as typed structs — `SpeechStartEvent`, `SpeechEvent`, `SpeechEndEvent`, and `StateChangedEvent` — on the `EventBus`.
+
+**Chat server (`/tmp/tool-chat`)** — accepts an OpenAI-format `messages` array, proxies the request to your local LLM, and streams tokens back. `ChatClient` receives the token stream and raises `ChatTokenEvent` for each fragment, followed by a `ChatDoneEvent` when the response is complete.
+
+## Starting the servers
+
+Consult the `named_pipes` README for the exact commands. At minimum you will launch two processes — one for `stt` and one for `chat` — each of which creates its FIFO at startup and begins listening. Both must be running before or during Unity's Play mode; `SttClient` and `ChatClient` retry the connection every three seconds if the pipe is not yet present.
+
+## Verifying the servers are running
+
+<Steps>
+  <Step title="Check that the FIFOs exist">
+    Open a terminal and run:
+
+    ```bash
+    ls -l /tmp/tool-stt /tmp/tool-chat
+    ```
+
+    Both entries should be present and shown as FIFOs (`prw-------` or similar). If either is missing, the corresponding server has not started successfully.
+  </Step>
+
+  <Step title="Open your Unity scene">
+    Open the scene that contains your `AgentManager` GameObject (or the Voice Agent Demo scene). You do not need to enter Play mode yet — `SttClient` uses `[ExecuteAlways]` and connects in Edit mode.
+  </Step>
+
+  <Step title="Inspect SttClient">
+    Select the **AgentManager** object in the Hierarchy. In the Inspector, find the **SttClient** component. The **Is Connected Debug** checkbox should tick itself to `true` within a few seconds of the server starting. You should also see a microphone-device dropdown populate with the inputs detected by the STT server.
+  </Step>
+
+  <Step title="Inspect ChatClient">
+    Still on the same GameObject, find the **ChatClient** component. Its **Is Connected Debug** field should also show `true`. If it remains `false`, the chat server is not yet running or the FIFO path does not match the **Tool Name** field.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+**`[SttClient] connect attempt failed` or `[ChatClient] connect attempt failed` appears in the Unity Console**
+The server is not running, or the **Tool Name** field in the component Inspector does not match the name used by the server. `SttClient` defaults to `"stt"` (FIFO at `/tmp/tool-stt`) and `ChatClient` defaults to `"chat"` (FIFO at `/tmp/tool-chat`). If your server uses a different name, update the **Tool Name** field to match.
+
+**SttClient shows `State = Error`**
+The STT model may still be loading into memory — speech-recognition models can take several seconds to initialise. Wait a few moments and the state should transition to `Ready` or `Listening`. If the error persists, check the server's terminal output for model-loading errors.
+
+**ChatClient stays disconnected**
+Verify that the chat server process is actually running (`ps aux | grep named_pipes` or equivalent) and that `/tmp/tool-chat` exists. Also confirm that the LLM endpoint the chat server is configured to call is reachable — a misconfigured LLM URL can cause the server itself to fail silently at startup.

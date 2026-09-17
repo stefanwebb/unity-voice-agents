@@ -1,0 +1,99 @@
+---
+title: "Add the Voice Agents Package to Your Unity 6 Project"
+sidebarTitle: "Installation"
+description: "Add the Voice Agents Unity package via Package Manager using a git URL, accept the Input System prompt, and import TextMeshPro essentials to finish setup."
+---
+
+Voice Agents is distributed as a Unity Package Manager (UPM) package hosted on GitHub. The fastest way to add it to your project is with a git URL — no registry or tarball required. Once the package is imported, Unity automatically pulls in a small set of required dependencies, and a single TextMeshPro step rounds out the setup.
+
+<Warning>
+  Voice Agents uses POSIX named pipes (`mkfifo`) to communicate with local STT and LLM servers. This transport is only supported on **macOS** and **Linux**. Windows is not supported at this time.
+</Warning>
+
+## Requirements
+
+Before you begin, make sure your environment meets the following:
+
+- **Unity 6000.0 or later** — the package requires .NET Standard 2.1 for `System.Text.Json`.
+- **macOS or Linux** — required by the named-pipe transport layer.
+- **TextMeshPro Essentials** — several built-in UI components render with TMP; you will import these during setup.
+
+## Install the Package
+
+<Steps>
+  <Step title="Open the Package Manager">
+    In the Unity Editor menu bar, go to **Window ▸ Package Manager** to open the Package Manager window.
+  </Step>
+
+  <Step title="Add package from git URL">
+    Click the **+** button in the top-left corner of the Package Manager window and choose **Add package from git URL…**
+
+    Paste the following URL and press **Add**:
+
+    ```
+    https://github.com/stefanwebb/unity-voice-agents.git
+    ```
+
+    Unity fetches the package and resolves its dependencies automatically.
+  </Step>
+
+  <Step title="Accept the Input System restart prompt (if shown)">
+    Voice Agents depends on the new Unity Input System (`com.unity.inputsystem`). If your project was previously using only the legacy Input Manager, Unity will display a dialog asking you to enable the new Input System backend and restart the Editor.
+
+    Click **Yes** to accept and let the Editor restart. Your project settings are saved automatically before the restart.
+  </Step>
+
+  <Step title="Import TextMeshPro Essentials">
+    Several built-in display components — such as `SttTranscriptionDisplay` and `ChatDisplay` — use TextMeshPro for rendering text.
+
+    In the menu bar, go to **Window ▸ TextMeshPro ▸ Import TMP Essential Resources** and click **Import** in the dialog that appears.
+
+    <Note>
+      You only need to do this once per project. If TMP Essential Resources are already present in your project, you can safely skip this step.
+    </Note>
+  </Step>
+
+  <Step title="Verify the installation">
+    Open any C# script in your project (or create a new one) and type `GenerativeGamedev.` — the `SttClient`, `ChatClient`, `ConversationManager`, and event types should all appear in your IDE's autocomplete list.
+
+    You can also confirm the package is listed in the Package Manager window under **In Project** with the name **Voice Agents**.
+  </Step>
+</Steps>
+
+## Alternative: Install from Disk
+
+If you have cloned the repository locally or are working with a development build of the package, you can install it from disk instead of from a git URL.
+
+<Steps>
+  <Step title="Open Add package from disk">
+    In the Package Manager window, click **+** and choose **Add package from disk…**
+  </Step>
+
+  <Step title="Select the package.json file">
+    Navigate to the root folder of the cloned repository and select its `package.json` file. Unity registers the package from that local path.
+  </Step>
+</Steps>
+
+## Auto-Installed Dependencies
+
+When you add Voice Agents, Unity automatically installs the following packages if they are not already present in your project:
+
+| Package | Version |
+|---|---|
+| `com.unity.ugui` | 2.0.0 |
+| `com.unity.inputsystem` | 1.11.0 |
+| `com.unity.render-pipelines.universal` | 17.0.0 |
+| `com.unity.modules.vectorgraphics` | 1.0.0 |
+
+If any of these packages are already installed at a compatible version, Unity keeps your existing version.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/Documentation~/quickstart">
+    Wire up SttClient, ChatClient, and ConversationManager in a new scene and hear your first voice response.
+  </Card>
+  <Card title="Server Setup" icon="server" href="/Documentation~/guides/server-setup">
+    Install and run the companion Python STT and LLM chat servers that Voice Agents connects to.
+  </Card>
+</CardGroup>

@@ -1,0 +1,166 @@
+---
+title: "Build Your First Unity 6 Voice Agent Scene from Scratch"
+sidebarTitle: "Quick Start"
+description: "Wire up SttClient, ChatClient, and ConversationManager in a new Unity scene and subscribe to your first voice events in under 10 minutes."
+---
+
+This guide walks you through creating a minimal voice-agent scene from scratch. By the end you will have a single GameObject with three Voice Agents components wired together, a short script that logs transcribed speech and streaming LLM replies to the console, and a working Play Mode loop triggered by pressing the spacebar.
+
+## Prerequisites
+
+Before continuing, make sure you have:
+
+- Installed the Voice Agents package — see the [Installation guide](/Documentation~/installation).
+- Imported **TextMeshPro Essentials** via **Window ▸ TextMeshPro ▸ Import TMP Essential Resources**.
+- Started your local [STT and LLM chat servers](/Documentation~/guides/server-setup) — Voice Agents cannot transcribe speech or stream replies without them.
+
+## Set Up the Scene
+
+<Steps>
+  <Step title="Add a GameObject with the core components">
+    Open a new empty scene (**File ▸ New Scene**). In the Hierarchy window, right-click and choose **Create Empty**. Rename the GameObject to `VoiceAgent`.
+
+    With `VoiceAgent` selected, click **Add Component** in the Inspector and add all three of the following components:
+
+    - `GenerativeGamedev > SttClient`
+    - `GenerativeGamedev > ChatClient`
+    - `GenerativeGamedev > ConversationManager`
+
+    All three components must live on the same GameObject (or at least in the same scene) because they communicate through the shared `EventBus`.
+  </Step>
+
+  <Step title="Configure SttClient">
+    Select the `VoiceAgent` GameObject and find the **Stt Client** component in the Inspector.
+
+    | Field | Recommended value | Notes |
+    |---|---|---|
+    | **Tool Name** | `stt` | Must match the tool name used when launching the STT server. |
+    | **Reconnect Interval Seconds** | `3` | Seconds between reconnection attempts when the pipe is unavailable. |
+    | **Ping Interval Seconds** | `5` | Seconds between heartbeat pings sent to the server. |
+    | **Pong Timeout Seconds** | `10` | Seconds to wait for a pong before treating the connection as lost. |
+
+    Leave all other fields at their defaults for now.
+
+    <Tip>
+      `SttClient` runs in **Edit Mode** as well as Play Mode. You can check the connection state and cycle through available microphone devices directly in the Inspector without pressing Play — useful for quickly verifying your STT server is running.
+    </Tip>
+  </Step>
+
+  <Step title="Configure ConversationManager">
+    Find the **Conversation Manager** component on the same GameObject.
+
+    - **System Prompt** — Type your agent's persona or instructions into this text area. For example:
+
+      ```
+      You are a helpful NPC in a fantasy RPG. Keep your answers short and in character.
+      ```
+
+    - **Accumulate History** — Leave this toggle **enabled** to keep the full conversation history across turns. Disable it if you want each player utterance to be treated as a fresh, single-turn request.
+  </Step>
+
+  <Step title="Write the VoiceAgentController script">
+    Create a new C# script called `VoiceAgentController` (right-click in the **Project** window ▸ **Create ▸ C# Script**) and replace its contents with the following:
+
+    ```csharp
+    using GenerativeGamedev;
+    using UnityEngine;
+
+    public class VoiceAgentController : MonoBehaviour
+    {
+        void OnEnable()
+        {
+            EventBus.SubscribeTo<StateChangedEvent>(OnStateChanged);
+            EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+            EventBus.SubscribeTo<ChatTokenEvent>(OnToken);
+            EventBus.SubscribeTo<ChatDoneEvent>(OnDone);
+        }
+
+        void OnDisable()
+        {
+            EventBus.UnsubscribeFrom<StateChangedEvent>(OnStateChanged);
+            EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+            EventBus.UnsubscribeFrom<ChatTokenEvent>(OnToken);
+            EventBus.UnsubscribeFrom<ChatDoneEvent>(OnDone);
+        }
+
+        // Press a key to start listening
+        void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.Space))
+                EventBus.Raise(new StartCommandEvent());
+        }
+
+        void OnStateChanged(ref StateChangedEvent e) =>
+            Debug.Log($"STT state: {e.State}");
+
+        void OnSpeech(ref SpeechEvent e) =>
+            Debug.Log($"Transcribed: {e.Text}");
+
+        void OnToken(ref ChatTokenEvent e) =>
+            Debug.Log(e.Text);
+
+        void OnDone(ref ChatDoneEvent e) =>
+            Debug.Log("LLM reply complete.");
+    }
+    ```
+
+    Add this script as a component to the `VoiceAgent` GameObject by dragging it from the Project window onto the Inspector.
+
+    The four event types used here cover the full response cycle:
+
+    | Event | When it fires |
+    |---|---|
+    | `StateChangedEvent` | The STT server state changes — `e.State` is one of `Ready`, `Loading`, `Listening`, `Transcribing`, `Paused`, or `Error`. |
+    | `SpeechEvent` | The STT server returns a transcribed segment of speech. |
+    | `ChatTokenEvent` | The LLM streams a single text token in its reply. |
+    | `ChatDoneEvent` | The LLM has finished generating the complete reply. |
+  </Step>
+
+  <Step title="Enter Play Mode and verify the connection">
+    Press **Play**. Watch the **Stt Client** component in the Inspector — the **Is Connected Debug** checkbox should become checked within a few seconds once the STT server accepts the pipe connection.
+
+    If it remains unchecked, confirm that your STT server is running and that the **Tool Name** field in `SttClient` matches the name the server was started with.
+  </Step>
+
+  <Step title="Speak and watch the console">
+    With the game running and the Game window focused, press **Space**. This raises a `StartCommandEvent`, which tells `SttClient` to begin capturing audio.
+
+    Speak a sentence into your microphone. You should see:
+
+    1. A `SpeechEvent` log entry in the Console with your transcribed text.
+    2. A series of `ChatTokenEvent` log entries as the LLM streams its reply token by token.
+    3. A final `ChatDoneEvent` log entry confirming the reply is complete.
+
+    <Note>
+      The `SpeechEvent` carries a raw transcription segment. To forward the confirmed, complete transcription to the `ConversationManager` and trigger an LLM reply, raise a `ConfirmedInputEvent` with the transcribed text:
+
+      ```csharp
+      void OnSpeech(ref SpeechEvent e)
+      {
+          Debug.Log($"Transcribed: {e.Text}");
+          // Send the confirmed transcription to the LLM
+          EventBus.Raise(new ConfirmedInputEvent { Text = e.Text });
+      }
+      ```
+
+      This two-step design lets you review or filter the transcription — for example with a confirmation UI — before committing it to the conversation history.
+    </Note>
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Voice Agent Demo" icon="play" href="/Documentation~/guides/voice-agent-demo">
+    Run the fully featured sample scene included with the package to see all components in action.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/Documentation~/concepts/architecture">
+    Learn how SttClient, ChatClient, and the EventBus fit together under the hood.
+  </Card>
+  <Card title="SttClient Reference" icon="microphone" href="/Documentation~/components/stt-client">
+    Explore every Inspector field and event raised by SttClient.
+  </Card>
+  <Card title="Custom NPC Guide" icon="person" href="/Documentation~/guides/custom-npc">
+    Build a fully voiced NPC character using the patterns from this quick start.
+  </Card>
+</CardGroup>

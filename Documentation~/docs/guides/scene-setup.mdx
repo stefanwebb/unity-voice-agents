@@ -1,0 +1,107 @@
+---
+title: "Configure a Voice Agent Scene in Unity from Scratch"
+sidebarTitle: "Scene Setup"
+description: "Add SttClient, ChatClient, ConversationManager, and UI helpers to a Unity scene and connect them together using the static EventBus."
+---
+
+Setting up a Voice Agents scene from scratch takes about ten minutes. You will create a single manager GameObject that hosts the three core components — `SttClient`, `ChatClient`, and `ConversationManager` — then add a Canvas with UI helpers for transcription display, agent response display, and connection state icons. All components communicate through the static `EventBus`; there are no direct Inspector references to wire between them.
+
+<Tip>
+If you want a fully working starting point rather than building from scratch, import the **Voice Agent Demo** sample from Package Manager (Window ▸ Package Manager ▸ Voice Agents ▸ Samples ▸ Import). The demo scene contains every component described here, pre-configured and ready to run.
+</Tip>
+
+## Prerequisites
+
+- Voice Agents package installed in your project
+- TextMeshPro Essentials imported — if you see a TMP import prompt, accept it, or go to **Window ▸ TextMeshPro ▸ Import TMP Essential Resources**
+- STT and chat servers running (see [Server Setup](/Documentation~/guides/server-setup))
+
+## Scene setup
+
+<Steps>
+  <Step title="Create the AgentManager GameObject">
+    In the Hierarchy, click **+ ▸ Create Empty** and name the new object `AgentManager`. This object will hold all three core components. Its position in the scene does not matter.
+  </Step>
+
+  <Step title="Add SttClient">
+    With `AgentManager` selected, click **Add Component** in the Inspector and search for **Stt Client**. The default **Tool Name** is `"stt"`, which connects to `/tmp/tool-stt`. Leave all other fields at their defaults unless you have changed the server's pipe name. Because `SttClient` runs with `[ExecuteAlways]`, you will see the **Is Connected Debug** field update as soon as the STT server is running — no Play mode required.
+  </Step>
+
+  <Step title="Add ChatClient">
+    Add a second component: **Chat Client**. The default **Tool Name** is `"chat"`, connecting to `/tmp/tool-chat`. As with `SttClient`, **Is Connected Debug** reflects live connection state.
+  </Step>
+
+  <Step title="Add ConversationManager">
+    Add a third component: **Conversation Manager**. In the **System Prompt** text area, enter the persona you want the agent to use. For example:
+
+    ```
+    You are a helpful dungeon guide. Keep your responses short and atmospheric.
+    ```
+
+    The **Accumulate History** checkbox (on by default) controls whether previous exchanges are included in every request to the LLM. Disable it for stateless interactions.
+  </Step>
+
+  <Step title="Create the UI Canvas">
+    In the Hierarchy, click **+ ▸ UI ▸ Canvas**. Set **Render Mode** to **Screen Space – Overlay**. Inside the Canvas, create two child Panel objects — name one `SpeechPanel` (for transcription and state icon) and the other `AgentPanel` (for the LLM's streaming response).
+  </Step>
+
+  <Step title="Add SttTranscriptionDisplay">
+    Inside `SpeechPanel`, add a **TextMeshPro - Text (UI)** object (**+ ▸ UI ▸ Text - TextMeshPro**). Select it, then **Add Component ▸ Stt Transcription Display**. This component subscribes to `SpeechStartEvent` and `SpeechEvent` and updates the `TMP_Text` on the same GameObject automatically. No further wiring is needed.
+  </Step>
+
+  <Step title="Add ChatDisplay">
+    Inside `AgentPanel`, add another **TextMeshPro - Text (UI)** object and attach **Chat Display** to it. This component listens to `ChatTokenEvent` and appends each streamed fragment to the text field, then clears it on `ChatDoneEvent`.
+  </Step>
+
+  <Step title="Add SttStateIcon">
+    Inside `SpeechPanel`, add a **Raw Image** object (**+ ▸ UI ▸ Raw Image**) and attach **Stt State Icon** to it. In the Inspector you will see a `CanvasGroup` reference field (assign the `CanvasGroup` on `SpeechPanel`) and texture slots for each visual state: **Listening**, **Disconnected**, **Speaking** (transcribing), **Not Ready** (loading/ready), **Speech Ended**, **Error**, and **Thinking** (shown while the LLM is inferring). Assign the icon textures you want to use for each slot. The component swaps the texture and adjusts the `CanvasGroup` alpha automatically as connection, STT state, and chat inference state change.
+  </Step>
+
+  <Step title="Add an input script">
+    Create a new C# script to translate player input into `EventBus` commands. The minimal implementation below handles Space to start listening, automatic pause when the server detects silence, and Enter to confirm the transcription and send it to the LLM:
+
+    ```csharp
+    using GenerativeGamedev;
+    using UnityEngine;
+
+    public class VoiceInput : MonoBehaviour
+    {
+        void OnEnable()
+        {
+            EventBus.SubscribeTo<SpeechEndEvent>(OnSpeechEnd);
+            EventBus.SubscribeTo<SpeechEvent>(OnSpeech);
+        }
+
+        void OnDisable()
+        {
+            EventBus.UnsubscribeFrom<SpeechEndEvent>(OnSpeechEnd);
+            EventBus.UnsubscribeFrom<SpeechEvent>(OnSpeech);
+        }
+
+        private string _lastText;
+
+        void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.Space))
+                EventBus.Raise(new StartCommandEvent());
+
+            if (Input.GetKeyDown(KeyCode.Return) && _lastText != null)
+                EventBus.Raise(new ConfirmedInputEvent { Text = _lastText });
+        }
+
+        void OnSpeech(ref SpeechEvent e)       => _lastText = e.Text;
+        void OnSpeechEnd(ref SpeechEndEvent e) => EventBus.Raise(new PauseCommandEvent());
+    }
+    ```
+
+    Attach this script to any active GameObject in the scene — `AgentManager` is a convenient choice. The Voice Agent Demo sample uses a more complete `PlayerController` that also handles game-pause logic (`Time.timeScale`) and Unity's new Input System (via `InputActionReference`) for rebindable key bindings; you can use it as a reference or copy it directly into your project.
+  </Step>
+</Steps>
+
+## Additional notes
+
+**URP projects** — the Voice Agent Demo sample includes a URP post-processing volume. If your project uses URP but the scene has no URP asset assigned in **Edit ▸ Project Settings ▸ Graphics**, the post-processing will not render. Assign a URP Renderer asset or create one via **Assets ▸ Create ▸ Rendering ▸ URP Asset**.
+
+**Only one instance per type** — `SttClient`, `ChatClient`, and `ConversationManager` each enforce a single active instance. If a second instance of any of these components is enabled at runtime, it disables itself and logs an error. Keep exactly one of each in your scene at a time.
+
+**EventBus subscription pattern** — always balance `SubscribeTo` in `OnEnable` with `UnsubscribeFrom` in `OnDisable`, as shown in the input script above. Failing to unsubscribe causes delegate leaks and double-invocation if the GameObject is toggled.

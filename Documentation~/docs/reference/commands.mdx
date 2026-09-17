@@ -1,0 +1,192 @@
+---
+title: "Voice Agents Commands: Control STT and Chat Servers"
+sidebarTitle: "Commands"
+description: "All command events you can raise on the EventBus to control the STT server, manage audio devices, and send messages to the LLM chat server."
+---
+
+Commands are plain event structs you raise on the `EventBus` to drive the STT and chat servers. You never call `SttClient` or `ChatClient` directly — instead, any script raises the appropriate command and the relevant client picks it up, translates it into a server message, and forwards it. This keeps your game logic fully decoupled from the transport layer.
+
+## Command Summary
+
+| Command | Fields | Handled By |
+|---|---|---|
+| `StartCommandEvent` | — | `SttClient` |
+| `PauseCommandEvent` | — | `SttClient` |
+| `ListDevicesCommandEvent` | — | `SttClient` |
+| `GetDeviceCommandEvent` | — | `SttClient` |
+| `SetDeviceCommandEvent` | `Device` | `SttClient` |
+| `ChatCommandEvent` | `Messages` | `ChatClient` |
+| `ConfirmedInputEvent` | `Text` | `ConversationManager` |
+
+---
+
+## STT Commands
+
+The following commands are forwarded to the STT server by `SttClient`. Raise them on the `EventBus` from any MonoBehaviour or static class.
+
+### StartCommandEvent
+
+Tells the STT server to begin listening for speech. The server will transition to the `Listening` state and start capturing microphone audio. This command has no fields.
+
+```csharp
+using GenerativeGamedev;
+
+// Begin listening when the player presses the speech button.
+void OnSpeechButtonPressed()
+{
+    EventBus.Raise(new StartCommandEvent());
+}
+```
+
+---
+
+### PauseCommandEvent
+
+Pauses the STT server and stops microphone capture. The server transitions to the `Paused` state. This command has no fields.
+
+A common pattern is to raise `PauseCommandEvent` inside your `SpeechEndEvent` handler to stop the microphone as soon as the user finishes speaking, then wait for the player to confirm before continuing.
+
+```csharp
+using GenerativeGamedev;
+
+// Pause listening as soon as silence is detected.
+void OnSpeechEnd(ref SpeechEndEvent e)
+{
+    EventBus.Raise(new PauseCommandEvent());
+}
+```
+
+---
+
+### ListDevicesCommandEvent
+
+Requests the full list of available audio input devices from the STT server. This command has no fields. `SttClient` will respond by raising a `DevicesEvent` on the `EventBus`.
+
+```csharp
+using GenerativeGamedev;
+
+// Populate a device dropdown when the settings panel opens.
+void OnSettingsPanelOpened()
+{
+    EventBus.Raise(new ListDevicesCommandEvent());
+}
+
+void OnEnable() => EventBus.SubscribeTo<DevicesEvent>(OnDevices);
+void OnDisable() => EventBus.UnsubscribeFrom<DevicesEvent>(OnDevices);
+
+void OnDevices(ref DevicesEvent e)
+{
+    deviceDropdown.ClearOptions();
+    foreach (var d in e.Devices)
+        deviceDropdown.options.Add(new TMP_Dropdown.OptionData(d.Name));
+}
+```
+
+---
+
+### GetDeviceCommandEvent
+
+Requests the index of the currently selected audio input device. This command has no fields. `SttClient` will respond by raising a `DeviceEvent` on the `EventBus`.
+
+```csharp
+using GenerativeGamedev;
+
+// Query the active device on startup.
+void Start()
+{
+    EventBus.Raise(new GetDeviceCommandEvent());
+}
+
+void OnEnable() => EventBus.SubscribeTo<DeviceEvent>(OnDevice);
+void OnDisable() => EventBus.UnsubscribeFrom<DeviceEvent>(OnDevice);
+
+void OnDevice(ref DeviceEvent e)
+{
+    Debug.Log(e.Device.HasValue
+        ? $"Active device index: {e.Device.Value}"
+        : "No device selected.");
+}
+```
+
+---
+
+### SetDeviceCommandEvent
+
+Selects an audio input device by name. `SttClient` forwards the name to the STT server, which switches its capture device accordingly.
+
+<ParamField path="Device" type="string">
+  The name of the audio input device to select. Must match a `Name` value from a previously received `DevicesEvent`. Pass the exact string — the STT server performs a case-sensitive lookup.
+</ParamField>
+
+```csharp
+using GenerativeGamedev;
+
+// Switch to the device the player chose in the dropdown.
+void OnDeviceSelected(int dropdownIndex)
+{
+    string deviceName = deviceDropdown.options[dropdownIndex].text;
+    EventBus.Raise(new SetDeviceCommandEvent { Device = deviceName });
+}
+```
+
+<Note>
+  After raising `SetDeviceCommandEvent`, listen for a subsequent `StateChangedEvent` to confirm the server has successfully switched devices before restarting capture.
+</Note>
+
+---
+
+## Chat Commands
+
+The following commands are handled by `ChatClient` or `ConversationManager`. Use `ConfirmedInputEvent` for typical game interactions, and `ChatCommandEvent` only when you need full control over the conversation history.
+
+### ChatCommandEvent
+
+Sends a complete conversation history to the LLM. `ChatClient` forwards the entire `Messages` array to the chat server and begins streaming the response as `ChatTokenEvent` events.
+
+<ParamField path="Messages" type="ChatMessage[]">
+  The full conversation history to send to the LLM. Each element is a <code>ChatMessage</code> with a <code>Role</code> (<code>"system"</code>, <code>"user"</code>, or <code>"assistant"</code>) and a <code>Content</code> string. You are responsible for ordering and formatting the array correctly.
+</ParamField>
+
+<Warning>
+  In most cases you should raise `ConfirmedInputEvent` instead and let `ConversationManager` manage the history and system prompt automatically. Use `ChatCommandEvent` only when you need to bypass `ConversationManager` and send a fully custom message array.
+</Warning>
+
+```csharp
+using GenerativeGamedev;
+
+// Manually construct and send a conversation.
+void SendCustomConversation()
+{
+    var messages = new ChatMessage[]
+    {
+        new ChatMessage { Role = "system",    Content = "You are a helpful guide." },
+        new ChatMessage { Role = "user",      Content = "What is the best path to the castle?" },
+    };
+
+    EventBus.Raise(new ChatCommandEvent { Messages = messages });
+}
+```
+
+---
+
+### ConfirmedInputEvent
+
+Carries the player's confirmed transcription text. `ConversationManager` listens for this event, appends the text to the running conversation history together with the configured system prompt, and raises a `ChatCommandEvent` automatically.
+
+<ParamField path="Text" type="string">
+  The confirmed transcription text from the player. This becomes a <code>"user"</code> role message in the conversation history maintained by <code>ConversationManager</code>.
+</ParamField>
+
+<Tip>
+  This is the primary entry point for speech-driven interactions. Raise `ConfirmedInputEvent` from your input handler (e.g. when the player presses a confirm button after reviewing the transcript) and let `ConversationManager` take care of the rest.
+</Tip>
+
+```csharp
+using GenerativeGamedev;
+
+// Raise when the player confirms the transcription preview.
+void OnConfirmButtonPressed()
+{
+    EventBus.Raise(new ConfirmedInputEvent { Text = _confirmedTranscript });
+}
+```

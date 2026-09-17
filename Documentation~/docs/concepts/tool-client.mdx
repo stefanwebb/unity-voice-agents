@@ -1,0 +1,218 @@
+---
+title: "ToolClient: Low-Level Named Pipe Protocol for Unity"
+sidebarTitle: "Tool Client"
+description: "ToolClient is the low-level C# class that connects to named-pipe tool servers, sends JSON-line commands, and dispatches incoming events."
+---
+
+`ToolClient` is the low-level transport layer that implements the Named Pipe Tools protocol in C#. It mirrors the Python `ToolClient` from the companion `named_pipes` package: it opens the upstream FIFO to write commands to a server, creates a per-process downstream FIFO to receive events from that server, and runs a background thread that continuously reads and dispatches incoming JSON lines. In normal usage you never instantiate `ToolClient` directly — `SttClient` and `ChatClient` manage it for you. However, if you want to integrate a custom tool server into your game, `ToolClient` gives you everything you need.
+
+<Note>
+`ToolClient` relies on POSIX `mkfifo` called via P/Invoke into `libc`. It runs on **macOS and Linux only**. There is no Windows support.
+</Note>
+
+## Protocol overview
+
+The Named Pipe Tools protocol uses two POSIX FIFOs per client connection:
+
+| Pipe | Path | Direction |
+|---|---|---|
+| Upstream | `/tmp/tool-{name}` | Client → Server (commands) |
+| Downstream | `/tmp/tool-{name}-{pid}` | Server → Client (events) |
+
+The server creates and owns the upstream FIFO before any client connects. `ToolClient` creates its own downstream FIFO using `mkfifo` at construction time, incorporating the current process ID so multiple clients can coexist without colliding. When the client is disposed, the downstream FIFO is deleted with `unlink`.
+
+Every message in both directions is a JSON object followed by a newline (`\n`). Commands sent to the server always carry a `pid` field and a `cmd` field:
+
+```json
+{"pid": 12345, "cmd": "ping"}
+{"pid": 12345, "cmd": "chat", "messages": [...]}
+```
+
+Events sent back by the server always carry an `event` field:
+
+```json
+{"event": "pong"}
+{"event": "token", "text": "Hello", "done": false}
+{"event": "subscribed"}
+```
+
+The `subscribed` event is reserved: `ToolClient` intercepts it internally to unblock `Subscribe()` and never forwards it to your handlers or the `EventReceived` event.
+
+## Constructor
+
+```csharp
+var client = new ToolClient("myserver");
+```
+
+Passing the tool name (without the `/tmp/tool-` prefix) is all that is required. The constructor:
+
+1. Derives the upstream path (`/tmp/tool-myserver`) and the downstream path (`/tmp/tool-myserver-{pid}`).
+2. Deletes any stale downstream FIFO from a previous run with the same PID.
+3. Creates the downstream FIFO with `mkfifo` (mode `0666`).
+4. Opens both FIFOs in read-write mode so neither open call blocks waiting for the other end.
+
+If the upstream FIFO does not exist (i.e., the server is not running), the constructor throws `IOException`. You should call it inside a try/catch and retry after a delay — exactly what `SttClient` and `ChatClient` do in their connect loops.
+
+## Key methods
+
+### `On(string eventName, Action<JsonObject> handler)`
+
+Register a callback for a specific server event name. Only one handler per name is supported; calling `On` with the same name a second time replaces the first.
+
+```csharp
+client.On("pong", _ => Console.WriteLine("Server is alive"));
+client.On("result", data =>
+{
+    var text = data["text"]?.GetValue<string>();
+    Console.WriteLine($"Got: {text}");
+});
+```
+
+### `ManualResetEventSlim StartListening()`
+
+Start the background reader thread. Returns a `ManualResetEventSlim` that is set when the thread exits (due to EOF, a dispose, or an exception). You can `Wait()` on the returned handle to block the calling thread until the connection is closed.
+
+```csharp
+var done = client.StartListening();
+// ... do other setup ...
+done.Wait(); // blocks until connection drops
+```
+
+### `void Subscribe()`
+
+Send a `subscribe` command and **block** until the server acknowledges with a `subscribed` event. You must call this before sending any other commands — the server will not route events to your downstream FIFO until you have subscribed.
+
+### `void Unsubscribe()`
+
+Send an `unsubscribe` command. No acknowledgement is expected. Call this before `Dispose()` as a courtesy to the server so it can stop routing events to your downstream FIFO.
+
+### `void SendCommand(string cmd, JsonObject? extra = null)`
+
+Send an arbitrary command to the server. The method serialises `{"pid": <pid>, "cmd": "<cmd>"}` as JSON, merges any extra fields you provide, and writes it as a single line. The write is protected by a lock so it is safe to call from multiple threads.
+
+```csharp
+// Simple command
+client.SendCommand("ping");
+
+// Command with extra fields
+client.SendCommand("set_device", new JsonObject { ["device"] = "Built-in Microphone" });
+```
+
+### `event EventHandler<EventReceivedEventArgs> EventReceived`
+
+Fires for every event received from the server, **except** `subscribed`. `EventReceivedEventArgs` carries the event name as a `string Event` property and the full parsed JSON object as a `JsonObject Data` property. This is the catch-all alternative to per-name `On` registrations.
+
+```csharp
+client.EventReceived += (_, args) =>
+    Debug.Log($"Event: {args.Event}, data: {args.Data}");
+```
+
+### `void Dispose()`
+
+Shuts down the client cleanly:
+
+1. Writes a sentinel string into the downstream FIFO to wake the listener thread without relying on `Close()` (which is not guaranteed to interrupt a blocking `ReadLine` on POSIX).
+2. Joins the listener thread (waits up to 2 seconds).
+3. Disposes the reader and writer streams.
+4. Calls `unlink` to delete the downstream FIFO.
+
+`ToolClient` implements `IDisposable`, so you can use a `using` declaration in any context where the lifetime is scoped:
+
+```csharp
+using var client = new ToolClient("myserver");
+```
+
+## Typical direct-use pattern
+
+Here is a complete example of using `ToolClient` directly for a custom tool integration:
+
+```csharp
+using System;
+using System.Collections.Concurrent;
+using System.Text.Json.Nodes;
+using GenerativeGamedev;
+using UnityEngine;
+
+public class MyToolIntegration : MonoBehaviour
+{
+    private ToolClient _client;
+    private readonly ConcurrentQueue<Action> _pending = new();
+
+    void OnEnable()
+    {
+        try
+        {
+            _client = new ToolClient("myserver");
+        }
+        catch (System.IO.IOException e)
+        {
+            Debug.LogWarning($"Server not found: {e.Message}");
+            return;
+        }
+
+        _client.On("pong", _ =>
+        {
+            // WARNING: this callback fires on the background listener thread.
+            // Do not call Unity APIs here directly — enqueue to the main thread.
+            _pending.Enqueue(() => Debug.Log("Server is alive"));
+        });
+        _client.On("result", data =>
+        {
+            var text = data["text"]?.GetValue<string>();
+            _pending.Enqueue(() => Debug.Log(text));
+        });
+
+        _client.StartListening();
+        _client.Subscribe();
+        _client.SendCommand("ping");
+    }
+
+    void Update()
+    {
+        while (_pending.TryDequeue(out var action))
+            action();
+    }
+
+    void OnDisable()
+    {
+        if (_client == null) return;
+        _client.Unsubscribe();
+        _client.Dispose();
+        _client = null;
+    }
+}
+```
+
+<Warning>
+**Callbacks registered with `On` and the `EventReceived` event fire on the background listener thread, not the Unity main thread.** You must not call Unity APIs (including `EventBus.Raise`, `Debug.Log`, any `UnityEngine` type) directly from inside these callbacks. Instead, enqueue a lambda to a thread-safe queue and dequeue it in `Update()`. This is exactly what `SttClient` and `ChatClient` do internally using a `ConcurrentQueue<Action>`.
+</Warning>
+
+## How `SttClient` and `ChatClient` use `ToolClient`
+
+Both high-level clients follow the same pattern:
+
+<Steps>
+
+### Connect loop thread
+
+A background thread calls `new ToolClient(name)` in a loop, catching `IOException` and sleeping for the configured retry interval when the server is not yet available.
+
+### Event registration
+
+Once a `ToolClient` is constructed successfully, the client registers per-event handlers with `On(...)` that enqueue `EventBus.Raise(...)` lambdas onto a `ConcurrentQueue<Action>`.
+
+### Start listening and subscribe
+
+`StartListening()` is called to start the reader thread, then `Subscribe()` blocks until the server confirms.
+
+### Heartbeat thread
+
+A second background thread sends `ping` every 5 seconds and waits up to 10 seconds for `pong`. If the pong never arrives, it calls `client.Dispose()`, which causes the `StartListening` handle to become set, which unblocks the connect loop's `done.Wait()` and triggers a reconnect.
+
+### Main-thread dispatch
+
+In `Update()`, the client dequeues all pending actions from the `ConcurrentQueue` and invokes them on the Unity main thread. This is when `EventBus.Raise` actually fires.
+
+</Steps>
+
+If you build your own tool integration using `ToolClient` directly, replicating this pattern gives you automatic reconnection, safe Unity API access, and heartbeat-based dead-server detection for free.
